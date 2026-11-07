@@ -37,8 +37,8 @@ func TestInitAsTheOwner(t *testing.T) {
 	for _, want := range []string{
 		"Found Node with Next.js.",
 		"Subject: Pact connection request — acme-crm",
-		"To: the address in Vennet's joining guide (core-contracts, docs/joining-the-network.md)",
-		"1. Send the request above to the address in Vennet's joining guide",
+		"To: support@vennet.dev\n",
+		"1. Send the request above to support@vennet.dev and wait",
 		"  wrote     lib/auth.ts",
 		"  wrote     app/.well-known/pact-jwks.json/route.ts",
 		"  wrote     migrations/20261107120000_cauthy_pact_keys.sql",

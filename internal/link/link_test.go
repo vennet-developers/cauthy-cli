@@ -104,14 +104,15 @@ func TestManifestAndRequest(t *testing.T) {
 	}
 }
 
-// No address is hard-coded: the request goes where Vennet's joining guide says.
+// The request goes where Vennet's joining guide says; without the guide at
+// hand, to the address Vennet publishes there.
 func TestRequestAddress(t *testing.T) {
 	r := request()
 	if err := r.Check(); err != nil {
 		t.Fatal(err)
 	}
 	q := ConnectionRequest(r)
-	if !strings.HasPrefix(q, "To: the address in Vennet's joining guide (core-contracts, docs/joining-the-network.md)\n") || strings.Contains(q, "@vennet") {
+	if !strings.HasPrefix(q, "To: support@vennet.dev\n") {
 		t.Fatalf("without an address:\n%s", q)
 	}
 	r.To = "pact@example.com"

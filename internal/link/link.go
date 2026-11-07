@@ -16,9 +16,10 @@ import (
 	"github.com/vennet-developers/cauthy-cli/internal/graph"
 )
 
-// GuideAddress stands in the request's To line when no address is known: no
-// address is hard-coded in the CLI; Vennet publishes it in its joining guide.
-const GuideAddress = "the address in Vennet's joining guide (core-contracts, docs/joining-the-network.md)"
+// GuideAddress is where a connection request goes when no joining guide is at
+// hand: the address Vennet publishes in core-contracts'
+// docs/joining-the-network.md. A guide that names another wins.
+const GuideAddress = "support@vennet.dev"
 
 // Guide is the joining guide's path in core-contracts.
 const Guide = "docs/joining-the-network.md"
