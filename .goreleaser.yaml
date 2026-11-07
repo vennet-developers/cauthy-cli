@@ -1,13 +1,10 @@
 # Releases cauthy: six binaries, archives, checksums.txt signed with cosign
 # (keyless, by the release workflow's GitHub identity). The workflow attests
 # build provenance and publishes the npm packages from dist/ afterwards.
+# Apache-2.0: every archive carries LICENSE and NOTICE (goreleaser OSS has no
+# project license field outside nfpms and brews).
 version: 2
 project_name: cauthy
-
-metadata:
-  description: "The Cauthy CLI: init, contracts pull, pact check, keys, conformance."
-  homepage: https://github.com/vennet-developers/cauthy-cli
-  license: Apache-2.0
 
 before:
   hooks:
