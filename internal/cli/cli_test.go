@@ -65,3 +65,13 @@ func TestSystemExecGivesUp(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestVersionWithoutADate(t *testing.T) {
+	env, out, _ := testEnv(t, nil)
+	Version, Commit, Date = "1.2.3", "0123456789abcdef0123", ""
+	t.Cleanup(func() { Version, Commit, Date = "dev", "", "" })
+	Run([]string{"version"}, env)
+	if !strings.HasPrefix(out.String(), "cauthy 1.2.3 (0123456789ab)\n") {
+		t.Fatalf("%q", out)
+	}
+}

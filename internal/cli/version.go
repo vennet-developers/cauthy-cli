@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"runtime/debug"
+	"strings"
 )
 
 // Set by the release build (-ldflags -X). A `go install` build has none and
@@ -42,12 +43,19 @@ func runVersion(args []string, env Env) int {
 		return code
 	}
 	fmt.Fprintf(env.Out, "cauthy %s", version())
+	var build []string
 	if Commit != "" {
 		short := Commit
 		if len(short) > 12 {
 			short = short[:12]
 		}
-		fmt.Fprintf(env.Out, " (%s, %s)", short, Date)
+		build = append(build, short)
+	}
+	if Date != "" {
+		build = append(build, Date)
+	}
+	if len(build) > 0 {
+		fmt.Fprintf(env.Out, " (%s)", strings.Join(build, ", "))
 	}
 	fmt.Fprintf(env.Out, "\nprotocol auth-bff %d\n%s %s/%s\n", Protocol, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	return ExitOK
