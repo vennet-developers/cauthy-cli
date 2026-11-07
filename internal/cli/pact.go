@@ -75,7 +75,7 @@ func runPact(args []string, env Env) int {
 	c, err := g.Read(*system, *linkID)
 	var refusal *graph.RefusalError
 	if errors.As(err, &refusal) {
-		fmt.Fprintf(env.Err, "cauthy: the application would refuse to start: %s\n", refusal.Reason)
+		fmt.Fprintf(env.Err, "cauthy: the application would refuse to start: %s\n", pact.Clean(refusal.Reason))
 		return ExitFail
 	}
 	if err != nil {

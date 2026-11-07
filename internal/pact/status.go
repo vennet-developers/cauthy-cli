@@ -66,7 +66,7 @@ func FetchStatus(client *http.Client, c *graph.Contract, token string) (*Status,
 func DescribeStatus(s *Status) string {
 	if s.InStep {
 		if s.ReconciledAt != nil {
-			return fmt.Sprintf("In step with its contract (last daily check %s).\n", *s.ReconciledAt)
+			return fmt.Sprintf("In step with its contract (last daily check %s).\n", Clean(*s.ReconciledAt))
 		}
 		return "In step with its contract.\n"
 	}
@@ -87,7 +87,9 @@ func DescribeStatus(s *Status) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-func itemText(i Item) string {
+func itemText(i Item) string { return Clean(rawItemText(i)) }
+
+func rawItemText(i Item) string {
 	s := i.Kind + " " + i.Value
 	if i.ClientID != "" && i.ClientID != i.Value {
 		s += " on " + i.ClientID

@@ -80,3 +80,18 @@ func TestPactCheckRefusalsAndUsage(t *testing.T) {
 		}
 	}
 }
+
+func TestPactCheckRefusalCarriesNoControlCharacter(t *testing.T) {
+	env, _, errOut := testEnv(t, nil)
+	vendored(t, env, "https://id.example.com")
+	path := filepath.Join(env.Dir, "contracts", "graph.json")
+	raw, _ := os.ReadFile(path)
+	evil := strings.ReplaceAll(string(raw), `"link":"acme-crm-signs-in-with-cauthy"`, `"link":"acme\u001b]0;owned\u0007"`)
+	evil = strings.ReplaceAll(evil, `"redirect_uris":["https://crm.example.com/api/auth/callback"]`, `"redirect_uris":[]`)
+	if err := os.WriteFile(path, []byte(evil), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"pact", "check", "--system", "acme-crm", "--offline"}, env); code != ExitFail || strings.ContainsAny(errOut.String(), "\x1b\x07") || !strings.Contains(errOut.String(), "acme]0;owned") {
+		t.Fatalf("exit %d %q", code, errOut)
+	}
+}

@@ -108,3 +108,39 @@ func TestOfflineRootKeys(t *testing.T) {
 		t.Fatalf("%+v", r.Lines)
 	}
 }
+
+func TestTextFromTheGraphCarriesNoControlCharacter(t *testing.T) {
+	const evil = "\x1b]0;owned\x07\x1b[2J\r‮"
+	r := &Report{}
+	r.Add("x"+evil, Fail, "detail %s end", evil)
+	c := contract()
+	c.Link, c.Tenant, c.RedirectURIs = "acme"+evil, "acme"+evil, []string{"https://crm.example.com/cb" + evil}
+	s := &Status{Outside: []Item{{Kind: "client", Value: "v" + evil, Detail: "d" + evil}}}
+	for _, text := range []string{r.Text(), Describe(c), DescribeStatus(s)} {
+		for _, bad := range []string{"\x1b", "\x07", "\r", "‮"} {
+			if strings.Contains(text, bad) {
+				t.Fatalf("%q in %q", bad, text)
+			}
+		}
+	}
+	if !strings.Contains(r.Text(), "detail ]0;owned[2J end") {
+		t.Fatalf("only the control characters go: %q", r.Text())
+	}
+}
+
+func TestRootKeyLengthIsInCharacters(t *testing.T) {
+	multibyte := strings.Repeat("é", 20) // 40 bytes, 20 characters
+	for _, vars := range []map[string]string{
+		{"PACT_ROOT_KEY": multibyte},
+		{"PACT_ROOT_KEY": strings.Repeat("a", 43), "PACT_ROOT_KEY_PREVIOUS": multibyte},
+	} {
+		r := &Report{}
+		Offline(r, contract(), env(vars))
+		if r.ExitCode() != 1 {
+			t.Fatalf("%s", r.Text())
+		}
+		if !strings.Contains(r.Text(), "too short") || strings.Contains(r.Text(), "is 20 characters") {
+			t.Fatalf("say too short, not the key's length:\n%s", r.Text())
+		}
+	}
+}

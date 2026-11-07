@@ -3,6 +3,7 @@ package pact
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/vennet-developers/cauthy-cli/internal/graph"
 )
@@ -42,6 +43,9 @@ func Describe(c *graph.Contract) string {
 	if c.EventsURL != "" {
 		lines = append(lines, fmt.Sprintf("  events          %s", c.EventsURL))
 	}
+	for i := range lines {
+		lines[i] = Clean(lines[i])
+	}
 	return strings.Join(lines, "\n") + "\n"
 }
 
@@ -72,15 +76,15 @@ func Offline(r *Report, c *graph.Contract, getenv func(string) string) {
 	switch {
 	case root == "":
 		r.Add("env.root_key", Advisory, "PACT_ROOT_KEY is not set in this shell; the deployment must set it (cauthy keys new-root makes one)")
-	case len(root) < MinRootKey:
-		r.Add("env.root_key", Fail, "PACT_ROOT_KEY is %d characters; at least %d (cauthy keys new-root makes one)", len(root), MinRootKey)
+	case utf8.RuneCountInString(root) < MinRootKey:
+		r.Add("env.root_key", Fail, "PACT_ROOT_KEY is too short: at least %d characters (cauthy keys new-root makes one)", MinRootKey)
 	default:
 		r.Add("env.root_key", Pass, "PACT_ROOT_KEY is set and long enough")
 	}
 	switch {
 	case previous == "":
-	case len(previous) < MinRootKey:
-		r.Add("env.root_key_previous", Fail, "PACT_ROOT_KEY_PREVIOUS is %d characters; at least %d", len(previous), MinRootKey)
+	case utf8.RuneCountInString(previous) < MinRootKey:
+		r.Add("env.root_key_previous", Fail, "PACT_ROOT_KEY_PREVIOUS is too short: at least %d characters", MinRootKey)
 	case previous == root:
 		r.Add("env.root_key_previous", Advisory, "PACT_ROOT_KEY_PREVIOUS equals PACT_ROOT_KEY: remove it")
 	default:
