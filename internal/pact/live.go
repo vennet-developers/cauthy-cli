@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/vennet-developers/cauthy-cli/internal/address"
 	"github.com/vennet-developers/cauthy-cli/internal/graph"
 )
 
@@ -56,7 +57,7 @@ func get(client *http.Client, target string) (*http.Response, []byte, error) {
 	req.Header.Set("Accept", "application/json")
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, address.Err(err)
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -69,50 +70,51 @@ func liveJWKS(r *Report, client *http.Client, c *graph.Contract) {
 		r.Add(id, NA, "the link has no service block: the application publishes no key")
 		return
 	}
+	shown := address.Redact(c.JWKSURL) // what messages show of it
 	res, body, err := get(client, c.JWKSURL)
 	if err != nil {
-		r.Add(id, Fail, "%s: %v", c.JWKSURL, err)
+		r.Add(id, Fail, "%s: %v", shown, err)
 		return
 	}
 	if res.StatusCode != http.StatusOK {
-		r.Add(id, Fail, "%s answered %d: mount the SDK's JWKS route there", c.JWKSURL, res.StatusCode)
+		r.Add(id, Fail, "%s answered %d: mount the SDK's JWKS route there", shown, res.StatusCode)
 		return
 	}
 	var set struct {
 		Keys []jwk `json:"keys"`
 	}
 	if err := json.Unmarshal(body, &set); err != nil {
-		r.Add(id, Fail, "%s is not a JWK set: %v", c.JWKSURL, err)
+		r.Add(id, Fail, "%s is not a JWK set: %v", shown, err)
 		return
 	}
 	for _, k := range set.Keys {
 		if k.D != "" || k.P != "" || k.Q != "" || k.DP != "" || k.DQ != "" || k.QI != "" {
-			r.Add(id, Fail, "%s publishes PRIVATE key material (kid %s): take it down, then rotate the key and PACT_ROOT_KEY", c.JWKSURL, k.Kid)
+			r.Add(id, Fail, "%s publishes PRIVATE key material (kid %s): take it down, then rotate the key and PACT_ROOT_KEY", shown, k.Kid)
 			return
 		}
 	}
 	if len(set.Keys) == 0 {
-		r.Add(id, Fail, "%s publishes no key", c.JWKSURL)
+		r.Add(id, Fail, "%s publishes no key", shown)
 		return
 	}
 	for _, k := range set.Keys {
 		if k.Kty != "RSA" || k.Alg != "RS256" || k.Kid == "" {
-			r.Add(id, Fail, "%s: every key is RSA with alg RS256 and a kid; found kty %q alg %q kid %q", c.JWKSURL, k.Kty, k.Alg, k.Kid)
+			r.Add(id, Fail, "%s: every key is RSA with alg RS256 and a kid; found kty %q alg %q kid %q", shown, k.Kty, k.Alg, k.Kid)
 			return
 		}
 		n, err := base64.RawURLEncoding.DecodeString(k.N)
 		if err != nil || new(big.Int).SetBytes(n).BitLen() < 2048 {
-			r.Add(id, Fail, "%s: key %s is not a 2048-bit RSA key", c.JWKSURL, k.Kid)
+			r.Add(id, Fail, "%s: key %s is not a 2048-bit RSA key", shown, k.Kid)
 			return
 		}
 	}
 	switch len(set.Keys) {
 	case 1:
-		r.Add(id, Pass, "one RS256 key published at %s", c.JWKSURL)
+		r.Add(id, Pass, "one RS256 key published at %s", shown)
 	case 2:
-		r.Add(id, Pass, "two RS256 keys published at %s (a rotation is in its 24-hour window)", c.JWKSURL)
+		r.Add(id, Pass, "two RS256 keys published at %s (a rotation is in its 24-hour window)", shown)
 	default:
-		r.Add(id, Fail, "%d keys published at %s: a rotation keeps two at most; remove the old ones", len(set.Keys), c.JWKSURL)
+		r.Add(id, Fail, "%d keys published at %s: a rotation keeps two at most; remove the old ones", len(set.Keys), shown)
 	}
 }
 

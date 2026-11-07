@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/vennet-developers/cauthy-cli/internal/address"
 	"github.com/vennet-developers/cauthy-cli/internal/graph"
 )
 
@@ -38,9 +39,9 @@ func FetchStatus(client *http.Client, c *graph.Contract, token string) (*Status,
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-Tenant-Key", c.Tenant)
 	req.Header.Set("Accept", "application/json")
-	res, err := client.Do(req)
+	res, err := address.Client(client).Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("asking Cauthy: %v", err)
+		return nil, fmt.Errorf("asking Cauthy: %v", address.Err(err))
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))

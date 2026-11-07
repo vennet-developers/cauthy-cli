@@ -156,3 +156,21 @@ func TestCheckFindsDrift(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestAnAddressNeverShowsWhatItCarries(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://contracts.example.com/graph.json?token=SECRET", http.StatusFound)
+	}))
+	defer srv.Close()
+	d := Deps{Dir: t.TempDir(), HTTP: srv.Client()}
+	for from, want := range map[string]string{
+		"http://user:pw@contracts.example.com/g?token=SECRET": "must be https",
+		srv.URL + "/graph.json?token=SECRET":                  "refused a redirect",
+		"https://127.0.0.1:1/graph.json?token=SECRET":         "127.0.0.1:1/graph.json",
+	} {
+		_, err := Fetch(d, from, false)
+		if err == nil || !strings.Contains(err.Error(), want) || strings.Contains(err.Error(), "SECRET") || strings.Contains(err.Error(), "pw@") {
+			t.Errorf("%s: got %v, want %q", from, err, want)
+		}
+	}
+}

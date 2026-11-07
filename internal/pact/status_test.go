@@ -62,3 +62,17 @@ func TestStatus(t *testing.T) {
 		t.Fatalf("%+v", r.Lines)
 	}
 }
+
+func TestStatusFollowsNoRedirectOffHTTPS(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://id.example.com/v1/pact/status?token=SECRET", http.StatusFound)
+	}))
+	defer srv.Close()
+	c := contract()
+	c.Issuer = srv.URL
+	r := &Report{}
+	CheckStatus(r, srv.Client(), c, "cty_pat_s3cret", false)
+	if l := line(r, "cauthy.status"); l.Status != Fail || !strings.Contains(l.Detail, "refused a redirect") || strings.Contains(l.Detail, "SECRET") {
+		t.Fatalf("%+v", l)
+	}
+}

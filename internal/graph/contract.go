@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/vennet-developers/cauthy-cli/internal/address"
 )
 
 // Provider is Cauthy's system id in the graph.
@@ -45,15 +47,12 @@ const nilUUID = "00000000-0000-0000-0000-000000000000"
 // ValidSystemID says whether s may name a system.
 func ValidSystemID(s string) bool { return systemID.MatchString(s) }
 
-// HTTPSAddress parses raw and accepts https, or http on localhost and 127.0.0.1.
+// HTTPSAddress parses raw and accepts https, or http on localhost and
+// 127.0.0.1. Its refusal shows the address without user info or query.
 func HTTPSAddress(raw, what string) (*url.URL, error) {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return nil, refuse("the %s is not an address: %q", what, raw)
-	}
-	local := u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"
-	if u.Scheme != "https" && !(u.Scheme == "http" && local) {
-		return nil, refuse("the %s must be https: %s", what, raw)
+	u, err := address.HTTPS(raw, what)
+	if err != nil {
+		return nil, &RefusalError{err.Error()}
 	}
 	return u, nil
 }

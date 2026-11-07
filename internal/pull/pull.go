@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/vennet-developers/cauthy-cli/internal/address"
 	"github.com/vennet-developers/cauthy-cli/internal/graph"
 )
 
@@ -110,7 +111,7 @@ func fetchURL(d Deps, from string) (*Source, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	res, err := d.HTTP.Do(req)
+	res, err := address.Client(d.HTTP).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", shown.String(), errors.Unwrap(err))
 	}

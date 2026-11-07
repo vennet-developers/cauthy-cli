@@ -130,3 +130,16 @@ func TestLiveRefusesAPlainHTTPAddress(t *testing.T) {
 		t.Fatalf("%+v", r.Lines)
 	}
 }
+
+func TestLiveNeverShowsWhatAnAddressCarries(t *testing.T) {
+	c := contract()
+	c.JWKSURL = "https://127.0.0.1:1/.well-known/pact-jwks.json?token=SECRET"
+	r := &Report{}
+	Live(r, http.DefaultClient, c, "https://127.0.0.1:1", "/api/auth", "basic")
+	if l := line(r, "live.jwks"); l.Status != Fail || strings.Contains(l.Detail, "SECRET") || !strings.Contains(l.Detail, "pact-jwks.json") {
+		t.Fatalf("%+v", l)
+	}
+	if strings.Contains(r.Text(), "SECRET") {
+		t.Fatalf("%s", r.Text())
+	}
+}

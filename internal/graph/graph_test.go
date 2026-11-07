@@ -127,3 +127,18 @@ func TestLocalhostIsAllowedOverHTTP(t *testing.T) {
 		t.Fatalf("%v %+v", err, c)
 	}
 }
+
+func TestRefusalsNeverShowWhatAnAddressCarries(t *testing.T) {
+	for _, change := range []func(g *Graph){
+		func(g *Graph) { g.Nodes[0].URL = "http://u:pw@id.example.com/?token=SECRET" },
+		func(g *Graph) { g.Edges[0].Service.JWKSURL = "http://u:pw@crm.example.com/k?token=SECRET" },
+		func(g *Graph) { g.Nodes[1].EventsURL = "ftp://crm.example.com/e?token=SECRET" },
+	} {
+		g := parsed(t)
+		change(g)
+		_, err := g.Read("acme-crm", "")
+		if err == nil || strings.Contains(err.Error(), "SECRET") || strings.Contains(err.Error(), "pw") {
+			t.Errorf("got %v", err)
+		}
+	}
+}
