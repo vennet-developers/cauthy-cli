@@ -33,16 +33,23 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 	env.HTTP = cauthy.Client()
 	vendored(t, env, cauthy.URL)
 	nextApp(t, env)
-	runs := [][]string{
-		{"pact", "check", "--system", "acme-crm"},
-		{"pact", "check", "--system", "acme-crm", "--live", cauthy.URL},
-		{"conformance", "--origin", b.URL, "--email", b.Email},
-		{"conformance", "--origin", b.URL, "--email", b.Email, "--level", "strict"},
-		{"keys", "new-root", "--out", "root.key"},
-		{"init", "--app-url", "https://crm.example.com", "--no-pull"},
+	// Each run's exit code is checked too, so a run that stopped early (and so
+	// printed nothing) cannot pass this test by accident.
+	runs := []struct {
+		args []string
+		code int
+	}{
+		{[]string{"pact", "check", "--system", "acme-crm"}, ExitFail},
+		{[]string{"pact", "check", "--system", "acme-crm", "--live", cauthy.URL}, ExitFail},
+		{[]string{"conformance", "--origin", b.URL, "--email", b.Email}, ExitOK},
+		{[]string{"conformance", "--origin", b.URL, "--email", b.Email, "--level", "strict"}, ExitFail},
+		{[]string{"keys", "new-root", "--out", "root.key"}, ExitOK},
+		{[]string{"init", "--app-url", "https://crm.example.com", "--no-pull"}, ExitOK},
 	}
-	for _, args := range runs {
-		Run(args, env)
+	for _, r := range runs {
+		if code := Run(r.args, env); code != r.code {
+			t.Errorf("%v: exit %d, want %d", r.args, code, r.code)
+		}
 	}
 	printed := out.String() + errOut.String()
 	for _, s := range secrets {
