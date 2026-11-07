@@ -27,7 +27,8 @@ type App struct {
 	Root           string // "" or "src": where the code lives
 	TypeScript     bool
 	ESM            bool
-	NextMajor      int
+	NextMajor      int // 0 when the version cannot be read ("latest", a tag)
+	NextMinor      int
 	PackageManager string // npm, pnpm, yarn, bun
 	Deps           map[string]bool
 
@@ -117,8 +118,9 @@ func detectNode(dir string) (*App, error) {
 		if has("src/app") {
 			a.Root = "src"
 		}
-		if m := regexp.MustCompile(`(\d+)`).FindString(versions["next"]); m != "" {
-			a.NextMajor, _ = strconv.Atoi(m)
+		if m := regexp.MustCompile(`(\d+)(?:\.(\d+))?`).FindStringSubmatch(versions["next"]); m != nil {
+			a.NextMajor, _ = strconv.Atoi(m[1])
+			a.NextMinor, _ = strconv.Atoi(m[2])
 		}
 	case "tanstack-start":
 		a.Root = "src"

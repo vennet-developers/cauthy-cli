@@ -56,6 +56,12 @@ func TestNode(t *testing.T) {
 			t.Errorf("%s: %v %q, want %q", pkg, err, a.Framework, want)
 		}
 	}
+	for version, want := range map[string][2]int{"^15.5.2": {15, 5}, "15.4.0": {15, 4}, "~14.2": {14, 2}, "16": {16, 0}, "latest": {0, 0}} {
+		a, _ := Detect(folder(t, map[string]string{"package.json": `{"dependencies":{"next":"` + version + `"}}`}), "")
+		if a.NextMajor != want[0] || a.NextMinor != want[1] {
+			t.Errorf("next %s: %d.%d, want %d.%d", version, a.NextMajor, a.NextMinor, want[0], want[1])
+		}
+	}
 	esm, _ := Detect(folder(t, map[string]string{"package.json": `{"type":"module","devDependencies":{"typescript":"5","express":"5"}}`}), "")
 	if !esm.ESM || !esm.TypeScript || esm.Root != "" {
 		t.Fatalf("%+v", esm)

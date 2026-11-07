@@ -78,6 +78,11 @@ func runInit(args []string, env Env) int {
 	}
 	language := map[string]string{"node": "Node", "go": "Go"}[app.Lang]
 	fmt.Fprintf(env.Out, "Found %s with %s.\n", language, framework)
+	if !*noFiles {
+		if err := scaffold.Supported(app); err != nil {
+			return fail(env, err)
+		}
+	}
 
 	req := link.Request{System: *system, URLs: urls, CallbackPath: *callback, Tenant: *tenant,
 		Service: !*noService, PersistentSessions: *persistent, Language: language, Framework: framework}

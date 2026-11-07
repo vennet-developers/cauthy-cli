@@ -66,9 +66,37 @@ func TestNextInContractMode(t *testing.T) {
 	if p.Install != "pnpm add @cauthyhq/node pg" {
 		t.Fatalf("install %q", p.Install)
 	}
-	old := Node(&detect.App{Lang: "node", Framework: "next", NextMajor: 15, PackageManager: "npm", Deps: map[string]bool{"@cauthyhq/node": true, "pg": true}}, "acme-crm")
+	old := Node(&detect.App{Lang: "node", Framework: "next", NextMajor: 15, NextMinor: 5, PackageManager: "npm", Deps: map[string]bool{"@cauthyhq/node": true, "pg": true}}, "acme-crm")
 	if !strings.HasSuffix(paths(old), " middleware.js") || old.Install != "" {
 		t.Fatalf("%s %q", paths(old), old.Install)
+	}
+	// Before 16 the middleware runs on the Edge runtime unless it says
+	// otherwise, and pg does not run there.
+	if mw := files(old)["middleware.js"]; !strings.Contains(mw, "runtime: 'nodejs'") {
+		t.Fatalf("%s", mw)
+	}
+	if strings.Contains(f["src/proxy.ts"], "runtime") {
+		t.Fatal("Next 16's proxy runs on Node.js: no runtime to say")
+	}
+}
+
+func TestNextBefore155IsRefused(t *testing.T) {
+	for _, v := range [][2]int{{15, 4}, {14, 2}, {13, 0}} {
+		err := Supported(&detect.App{Lang: "node", Framework: "next", NextMajor: v[0], NextMinor: v[1]})
+		if err == nil || !strings.Contains(err.Error(), "Next.js 15.5 or newer") {
+			t.Errorf("%v: %v", v, err)
+		}
+	}
+	for _, a := range []*detect.App{
+		{Lang: "node", Framework: "next", NextMajor: 15, NextMinor: 5},
+		{Lang: "node", Framework: "next", NextMajor: 16},
+		{Lang: "node", Framework: "next"}, // a version init cannot read: the current one
+		{Lang: "node", Framework: "hono"},
+		{Lang: "go", Framework: "chi"},
+	} {
+		if err := Supported(a); err != nil {
+			t.Errorf("%+v: %v", a, err)
+		}
 	}
 }
 

@@ -163,3 +163,16 @@ func TestInitReadsTheRequestAddressFromTheGuide(t *testing.T) {
 		t.Fatalf("%s", out)
 	}
 }
+
+func TestInitRefusesNextBefore155(t *testing.T) {
+	env, out, errOut := testEnv(t, nil)
+	if err := os.WriteFile(filepath.Join(env.Dir, "package.json"), []byte(`{"name":"acme-crm","dependencies":{"next":"15.4.2"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"init", "--app-url", "https://crm.example.com", "--no-pull"}, env); code != ExitFail || !strings.Contains(errOut.String(), "Next.js 15.5 or newer is required (found 15.4)") {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	if entries, _ := os.ReadDir(env.Dir); len(entries) != 1 {
+		t.Fatalf("init wrote %d files before refusing", len(entries)-1)
+	}
+}

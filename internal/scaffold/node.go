@@ -43,6 +43,16 @@ func join(parts ...string) string {
 	return path.Join(kept...)
 }
 
+// Supported refuses what init cannot wire: Next.js before 15.5, whose
+// middleware cannot run on Node.js (pg, and the sealed key, need it). A Next
+// version init cannot read is taken as the current one.
+func Supported(a *detect.App) error {
+	if a.Framework == "next" && a.NextMajor > 0 && (a.NextMajor < 15 || a.NextMajor == 15 && a.NextMinor < 5) {
+		return fmt.Errorf("Next.js 15.5 or newer is required (found %d.%d): before it the middleware runs only on the Edge runtime, where the key store cannot. Upgrade Next.js, then run cauthy init again", a.NextMajor, a.NextMinor)
+	}
+	return nil
+}
+
 // Node is the plan for a Node application in contract mode.
 func Node(a *detect.App, system string) Plan {
 	ext := "js"
@@ -81,12 +91,14 @@ func Node(a *detect.App, system string) Plan {
 		p.Files = append(p.Files, File{route, fmt.Sprintf("// Serves Cauthy's routes under /api/auth. Written by cauthy init.\nimport { cauthy } from '%s'\n\nexport const { GET, POST } = cauthy\n", importPath(route, authFile))})
 		jwks := join(a.Root, "app/.well-known/pact-jwks.json", "route."+ext)
 		p.Files = append(p.Files, File{jwks, fmt.Sprintf("// Publishes the public half of the application's key at the jwks_url of its\n// manifest. Written by cauthy init.\nimport { auth } from '%s'\n\nexport const GET = () => auth.pact%s.jwks()\n", importPath(jwks, authFile), bang)})
-		name := "middleware"
-		if a.NextMajor >= 16 {
-			name = "proxy"
+		// Next 16's proxy runs on Node.js; 15.5's middleware must say so, or
+		// it runs on the Edge runtime, where pg cannot.
+		name, runtime := "proxy", ""
+		if a.NextMajor > 0 && a.NextMajor < 16 {
+			name, runtime = "middleware", "runtime: 'nodejs', "
 		}
 		before := join(a.Root, name+"."+ext)
-		p.Files = append(p.Files, File{before, fmt.Sprintf("// Keeps the session renewed. Written by cauthy init.\nimport { cauthy } from '%s'\n\nexport default cauthy.middleware()\n\nexport const config = { matcher: ['/((?!_next/|favicon.ico).*)'] }\n", importPath(before, authFile))})
+		p.Files = append(p.Files, File{before, fmt.Sprintf("// Keeps the session renewed. Written by cauthy init.\nimport { cauthy } from '%s'\n\nexport default cauthy.middleware()\n\nexport const config = { %smatcher: ['/((?!_next/|favicon.ico).*)'] }\n", importPath(before, authFile), runtime)})
 		p.Steps = append(p.Steps, "Start the application ("+dev+") and open http://localhost:3000/api/auth/login")
 	case "tanstack-start":
 		authFile := join(a.Root, "auth."+ext)
