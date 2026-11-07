@@ -30,11 +30,21 @@ type Deps struct {
 
 // Source is a graph read from core-contracts.
 type Source struct {
-	Raw     []byte // graph.json, ending in a newline
-	Version string // the commit, or sha256:<hex> for a graph read from an address
-	Systems int
-	Links   int
+	Raw      []byte // graph.json, ending in a newline
+	Version  string // the commit, or sha256:<hex> for a graph read from an address
+	Systems  int
+	Links    int
+	Warnings []string // what a person should know, such as why it is unversioned
 }
+
+// InputError is an input that cannot be read: a source or a vendored copy
+// that is missing or is not a graph. The CLI answers it with exit code 2.
+type InputError struct{ Err error }
+
+func (e *InputError) Error() string { return e.Err.Error() }
+func (e *InputError) Unwrap() error { return e.Err }
+
+func inputf(format string, a ...any) error { return &InputError{fmt.Errorf(format, a...)} }
 
 func (d Deps) abs(p string) string {
 	if filepath.IsAbs(p) {
@@ -56,23 +66,50 @@ func Fetch(d Deps, from string, allowDirty bool) (*Source, error) {
 	return fetchDir(d, d.abs(from), allowDirty)
 }
 
+// sameFolder says whether a and b name one folder, through links and the
+// file system's case rules.
+func sameFolder(a, b string) bool {
+	sa, errA := os.Stat(a)
+	sb, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(sa, sb)
+}
+
+// version reads the commit of the checkout at dir. A folder that is not a
+// checkout's root (not one, or a folder inside another), or a checkout with no
+// commit, is unversioned, with the reason as a warning.
+func version(d Deps, dir string, allowDirty bool) (string, []string, error) {
+	top, err := d.Exec(dir, "git", "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "unversioned", []string{dir + " is not a git checkout: VERSION says unversioned"}, nil
+	}
+	if root := strings.TrimSpace(string(top)); !sameFolder(filepath.FromSlash(root), dir) {
+		return "unversioned", []string{fmt.Sprintf("%s is inside the git checkout %s, not its root: VERSION says unversioned", dir, root)}, nil
+	}
+	head, err := d.Exec(dir, "git", "rev-parse", "HEAD")
+	if err != nil {
+		return "unversioned", []string{dir + " has no commit yet: VERSION says unversioned"}, nil
+	}
+	v := strings.TrimSpace(string(head))
+	status, err := d.Exec(dir, "git", "status", "--porcelain")
+	if err != nil {
+		return "", nil, err
+	}
+	if len(bytes.TrimSpace(status)) > 0 {
+		if !allowDirty {
+			return "", nil, fmt.Errorf("%s has uncommitted changes: the graph must come from a commit (commit them, or pass --allow-dirty to try a draft)", dir)
+		}
+		v += "-dirty"
+	}
+	return v, nil, nil
+}
+
 func fetchDir(d Deps, dir string, allowDirty bool) (*Source, error) {
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-		return nil, fmt.Errorf("no contracts repository at %s (give --from, or set CONTRACTS_DIR)", dir)
+		return nil, inputf("no contracts repository at %s (give --from, or set CONTRACTS_DIR)", dir)
 	}
-	version := "unversioned"
-	if head, err := d.Exec(dir, "git", "rev-parse", "HEAD"); err == nil {
-		version = strings.TrimSpace(string(head))
-		status, err := d.Exec(dir, "git", "status", "--porcelain")
-		if err != nil {
-			return nil, err
-		}
-		if len(bytes.TrimSpace(status)) > 0 {
-			if !allowDirty {
-				return nil, fmt.Errorf("%s has uncommitted changes: the graph must come from a commit (commit them, or pass --allow-dirty to try a draft)", dir)
-			}
-			version += "-dirty"
-		}
+	v, warnings, err := version(d, dir, allowDirty)
+	if err != nil {
+		return nil, err
 	}
 	var raw []byte
 	if _, err := os.Stat(filepath.Join(dir, "scripts", "graph.mjs")); err == nil {
@@ -93,38 +130,42 @@ func fetchDir(d Deps, dir string, allowDirty bool) (*Source, error) {
 	} else {
 		var err error
 		if raw, err = os.ReadFile(filepath.Join(dir, "graph.json")); err != nil {
-			return nil, fmt.Errorf("%s has neither scripts/graph.mjs nor graph.json", dir)
+			return nil, inputf("%s has neither scripts/graph.mjs nor graph.json", dir)
 		}
 	}
-	return source(raw, version)
+	s, err := source(raw, v)
+	if err != nil {
+		return nil, err
+	}
+	s.Warnings = warnings
+	return s, nil
 }
 
 func fetchURL(d Deps, from string) (*Source, error) {
 	u, err := graph.HTTPSAddress(from, "graph address")
 	if err != nil {
-		return nil, err
+		return nil, &InputError{err}
 	}
-	shown := *u
-	shown.RawQuery, shown.User = "", nil // a query may carry a token: never shown
+	shown := address.Redact(from) // a query may carry a token: never shown
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, &InputError{err}
 	}
 	req.Header.Set("Accept", "application/json")
 	res, err := address.Client(d.HTTP).Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %v", shown.String(), errors.Unwrap(err))
+		return nil, inputf("%s: %v", shown, errors.Unwrap(err))
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s answered %d", shown.String(), res.StatusCode)
+		return nil, inputf("%s answered %d", shown, res.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, MaxGraph+1))
 	if err != nil {
-		return nil, err
+		return nil, inputf("%s: %v", shown, err)
 	}
 	if len(raw) > MaxGraph {
-		return nil, fmt.Errorf("%s answered more than %d bytes: not a graph", shown.String(), MaxGraph)
+		return nil, inputf("%s answered more than %d bytes: not a graph", shown, MaxGraph)
 	}
 	sum := sha256.Sum256(raw)
 	return source(raw, "sha256:"+hex.EncodeToString(sum[:]))
@@ -133,7 +174,7 @@ func fetchURL(d Deps, from string) (*Source, error) {
 func source(raw []byte, version string) (*Source, error) {
 	g, err := graph.Parse(raw)
 	if err != nil {
-		return nil, err
+		return nil, &InputError{err}
 	}
 	if !bytes.HasSuffix(raw, []byte("\n")) {
 		raw = append(raw, '\n')
@@ -143,25 +184,50 @@ func source(raw []byte, version string) (*Source, error) {
 }
 
 // Write puts graph.json and VERSION in every destination, then checks every
-// copy is identical. It answers the line to print.
+// copy is identical. It answers the line to print. Every file is first
+// written and synced beside its place, and only then are all of them moved
+// into place, so a destination that cannot be written leaves every folder as
+// it was.
 func Write(d Deps, src *Source, dests []string) (string, error) {
 	if len(dests) == 0 {
 		return "", errors.New("give at least one --to")
 	}
-	seen := map[string]bool{}
-	for _, dest := range dests {
+	var folders []string
+	for i, dest := range dests {
 		p := d.abs(dest)
-		if seen[p] {
-			return "", fmt.Errorf("--to %s is given twice", dest)
-		}
-		seen[p] = true
 		if err := os.MkdirAll(p, 0o755); err != nil {
 			return "", err
 		}
-		if err := atomicWrite(filepath.Join(p, "graph.json"), src.Raw); err != nil {
-			return "", err
+		for j, other := range folders {
+			if sameFolder(p, other) {
+				return "", fmt.Errorf("--to %s is given twice: it is the same folder as --to %s", dests[i], dests[j])
+			}
 		}
-		if err := atomicWrite(filepath.Join(p, "VERSION"), []byte(src.Version+"\n")); err != nil {
+		folders = append(folders, p)
+	}
+
+	type move struct{ tmp, final string }
+	var moves []move
+	cleanup := func() {
+		for _, m := range moves {
+			os.Remove(m.tmp)
+		}
+	}
+	for _, p := range folders {
+		for name, data := range map[string][]byte{"graph.json": src.Raw, "VERSION": []byte(src.Version + "\n")} {
+			tmp, err := syncedTemp(p, data)
+			if err != nil {
+				cleanup()
+				return "", err
+			}
+			moves = append(moves, move{tmp, filepath.Join(p, name)})
+		}
+	}
+	for i, m := range moves {
+		if err := os.Rename(m.tmp, m.final); err != nil {
+			for _, rest := range moves[i:] {
+				os.Remove(rest.tmp)
+			}
 			return "", err
 		}
 	}
@@ -169,6 +235,33 @@ func Write(d Deps, src *Source, dests []string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("graph %s → %s (%d systems, %d links); every copy identical", Short(src.Version), strings.Join(dests, ", "), src.Systems, src.Links), nil
+}
+
+// syncedTemp writes data to a new file in dir, synced to disk, and answers its path.
+func syncedTemp(dir string, data []byte) (string, error) {
+	tmp, err := os.CreateTemp(dir, ".cauthy-*")
+	if err != nil {
+		return "", err
+	}
+	fail := func(err error) (string, error) {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return fail(err)
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		return fail(err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return fail(err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	return tmp.Name(), nil
 }
 
 // Short is a version as a person reads it: a commit's first 8 characters.
@@ -187,6 +280,7 @@ func Short(version string) string {
 }
 
 // Check says whether every destination holds the same graph.json and VERSION.
+// A copy that is missing or is not a graph is an *InputError.
 func Check(d Deps, dests []string) error {
 	if len(dests) == 0 {
 		return errors.New("give at least one --to")
@@ -196,14 +290,14 @@ func Check(d Deps, dests []string) error {
 		p := d.abs(dest)
 		raw, err := os.ReadFile(filepath.Join(p, "graph.json"))
 		if err != nil {
-			return fmt.Errorf("%s has no graph.json: run cauthy contracts pull", dest)
+			return inputf("%s has no graph.json: run cauthy contracts pull", dest)
 		}
 		if _, err := graph.Parse(raw); err != nil {
-			return fmt.Errorf("%s/graph.json: %w", dest, err)
+			return inputf("%s/graph.json: %v", dest, err)
 		}
 		version, err := os.ReadFile(filepath.Join(p, "VERSION"))
 		if err != nil {
-			return fmt.Errorf("%s has no VERSION: run cauthy contracts pull", dest)
+			return inputf("%s has no VERSION: run cauthy contracts pull", dest)
 		}
 		sum := sha256.Sum256(append(append(raw, 0), version...))
 		h := hex.EncodeToString(sum[:])
@@ -216,24 +310,4 @@ func Check(d Deps, dests []string) error {
 		}
 	}
 	return nil
-}
-
-func atomicWrite(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".cauthy-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(0o644); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
 }

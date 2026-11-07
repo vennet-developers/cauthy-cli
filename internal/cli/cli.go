@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/vennet-developers/cauthy-cli/internal/pull"
 )
 
 // Exit codes, the same as the conformance runner's.
@@ -38,6 +40,9 @@ type Env struct {
 	Exec func(dir, name string, args ...string) ([]byte, error)
 }
 
+// execTimeout bounds every program a command runs (git, node).
+var execTimeout = 2 * time.Minute
+
 // System is the Env of a real run.
 func System() Env {
 	dir, err := os.Getwd()
@@ -49,11 +54,17 @@ func System() Env {
 		HTTP: &http.Client{Timeout: 15 * time.Second},
 		Now:  time.Now, Rand: rand.Reader,
 		Exec: func(dir, name string, args ...string) ([]byte, error) {
-			cmd := exec.Command(name, args...)
+			ctx, cancel := context.WithTimeout(context.Background(), execTimeout)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, name, args...)
 			cmd.Dir = dir
+			cmd.WaitDelay = 5 * time.Second
 			var stderr strings.Builder
 			cmd.Stderr = &stderr
 			out, err := cmd.Output()
+			if ctx.Err() != nil {
+				return out, fmt.Errorf("%s %s did not finish within %s", name, strings.Join(args, " "), execTimeout)
+			}
 			if err != nil {
 				return out, fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 			}
@@ -107,10 +118,12 @@ func usagef(format string, a ...any) error {
 	return fmt.Errorf("%w: %s", errUsage, fmt.Sprintf(format, a...))
 }
 
-// fail prints an error and answers its exit code: 2 for a usage error, else 1.
+// fail prints an error and answers its exit code: 2 for a usage error or an
+// input that cannot be read, else 1.
 func fail(env Env, err error) int {
 	fmt.Fprintf(env.Err, "cauthy: %s\n", strings.TrimPrefix(err.Error(), errUsage.Error()+": "))
-	if errors.Is(err, errUsage) {
+	var input *pull.InputError
+	if errors.Is(err, errUsage) || errors.As(err, &input) {
 		return ExitUsage
 	}
 	return ExitFail

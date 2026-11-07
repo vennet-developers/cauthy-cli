@@ -38,7 +38,8 @@ manifest at all. Run it again at any time: what is there is left alone.
   --persistent-sessions  people may ask to stay signed in
   --lang node|go         when the folder has both package.json and go.mod
   --contracts <folder>   a core-contracts checkout to draft the link into
-  --from <folder|url>    where to pull the graph from; default CONTRACTS_DIR, else ../core-contracts
+  --from <folder|url>    where to pull the graph from; default CONTRACTS_DIR, else
+                         ../core-contracts (a folder's scripts/graph.mjs is run with node)
   --to <folder>          where to vendor it (repeat); default contracts
   --no-pull              do not pull the graph
   --no-files             write nothing into the application

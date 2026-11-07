@@ -15,8 +15,11 @@ pull vendors the Pact graph: graph.json and VERSION in every --to folder
 (default: contracts), the same bytes in each, then checks they are
 identical. Commit what it writes: the application never fetches its
 contract while it runs. --from defaults to CONTRACTS_DIR, else
-../core-contracts. A checkout with uncommitted changes is refused unless
---allow-dirty: the graph an application vendors is the one of a commit.
+../core-contracts. A folder given as --from is trusted: pull runs its
+scripts/graph.mjs with node (or reads its graph.json when it has none), so
+give only a core-contracts checkout you trust. A checkout with uncommitted
+changes is refused unless --allow-dirty: the graph an application vendors
+is the one of a commit.
 
 check says whether the --to folders hold identical copies (for CI).
 `
@@ -79,6 +82,9 @@ func pullInto(env Env, from string, to []string, allowDirty bool) (string, error
 	src, err := pull.Fetch(pullDeps(env), from, allowDirty)
 	if err != nil {
 		return "", err
+	}
+	for _, w := range src.Warnings {
+		fmt.Fprintf(env.Err, "cauthy: warning: %s\n", w)
 	}
 	return pull.Write(pullDeps(env), src, to)
 }

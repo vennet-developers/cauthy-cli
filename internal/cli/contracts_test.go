@@ -40,6 +40,9 @@ func TestContractsPullAndCheck(t *testing.T) {
 	if !strings.Contains(out.String(), "graph unversioned → contracts, web/contracts (2 systems, 1 links); every copy identical") {
 		t.Fatalf("%s", out)
 	}
+	if !strings.Contains(errOut.String(), "cauthy: warning: "+src+" is not a git checkout") {
+		t.Fatalf("why it is unversioned goes to stderr: %q", errOut)
+	}
 	out.Reset()
 	if code := Run([]string{"contracts", "check", "--to", "contracts", "--to", "web/contracts"}, env); code != ExitOK || !strings.Contains(out.String(), "identical") {
 		t.Fatalf("exit %d %s %s", code, out, errOut)
@@ -61,7 +64,15 @@ func TestContractsUsage(t *testing.T) {
 			t.Errorf("%v: exit %d %s", args, code, errOut)
 		}
 	}
-	if code := Run([]string{"contracts", "pull", "--from", "nowhere"}, env); code != ExitFail || !strings.Contains(errOut.String(), "no contracts repository") {
+	// An input that cannot be read is exit 2, as a usage error.
+	if code := Run([]string{"contracts", "pull", "--from", "nowhere"}, env); code != ExitUsage || !strings.Contains(errOut.String(), "no contracts repository") {
 		t.Fatalf("exit %d %s", code, errOut)
+	}
+	if code := Run([]string{"contracts", "check", "--to", "missing"}, env); code != ExitUsage || !strings.Contains(errOut.String(), "missing has no graph.json") {
+		t.Fatalf("exit %d %s", code, errOut)
+	}
+	env, out, _ := testEnv(t, nil)
+	if code := Run([]string{"contracts", "--help"}, env); code != ExitOK || !strings.Contains(out.String(), "scripts/graph.mjs with node") {
+		t.Fatalf("the help says what --from <folder> runs:\n%s", out)
 	}
 }

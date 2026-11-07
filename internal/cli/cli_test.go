@@ -55,3 +55,13 @@ func TestVersion(t *testing.T) {
 		t.Fatalf("extra arg: exit %d\n%s", code, errOut)
 	}
 }
+
+func TestSystemExecGivesUp(t *testing.T) {
+	was := execTimeout
+	execTimeout = time.Nanosecond
+	t.Cleanup(func() { execTimeout = was })
+	_, err := System().Exec(t.TempDir(), "go", "version")
+	if err == nil || !strings.Contains(err.Error(), "did not finish within") {
+		t.Fatalf("got %v", err)
+	}
+}
