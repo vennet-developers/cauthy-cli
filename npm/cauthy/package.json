@@ -1,0 +1,34 @@
+{
+  "name": "cauthy",
+  "version": "0.0.0",
+  "description": "The Cauthy CLI: init, contracts pull, pact check, keys, conformance.",
+  "license": "MIT",
+  "homepage": "https://github.com/vennet-developers/cauthy-cli",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vennet-developers/cauthy-cli.git",
+    "directory": "npm/cauthy"
+  },
+  "bin": {
+    "cauthy": "bin/cauthy.js"
+  },
+  "files": [
+    "bin",
+    "lib/platform.js",
+    "checksums.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/platform.test.js"
+  },
+  "optionalDependencies": {
+    "@cauthyhq/cli-darwin-arm64": "0.0.0",
+    "@cauthyhq/cli-darwin-x64": "0.0.0",
+    "@cauthyhq/cli-linux-arm64": "0.0.0",
+    "@cauthyhq/cli-linux-x64": "0.0.0",
+    "@cauthyhq/cli-win32-arm64": "0.0.0",
+    "@cauthyhq/cli-win32-x64": "0.0.0"
+  }
+}
