@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -57,5 +58,20 @@ func TestConformanceUsage(t *testing.T) {
 		if code := Run(args, env); code != ExitUsage {
 			t.Errorf("%v: exit %d %s", args, code, errOut)
 		}
+	}
+}
+
+func TestConformanceStopsWhenTheContextIsDone(t *testing.T) {
+	b := runnertest.NewBackend()
+	defer b.Close()
+	env, _, errOut := testEnv(t, map[string]string{"CONFORMANCE_PASSWORD": b.Password})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	env.Ctx = ctx
+	if code := Run([]string{"conformance", "--origin", b.URL, "--email", b.Email}, env); code != ExitFail || !strings.Contains(errOut.String(), "canceled") {
+		t.Fatalf("exit %d %s", code, errOut)
+	}
+	if b.SignIns() != 0 {
+		t.Fatal("a canceled run drove the backend")
 	}
 }

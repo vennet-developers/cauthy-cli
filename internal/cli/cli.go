@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"flag"
@@ -26,6 +27,7 @@ const (
 
 // Env is everything a command touches outside itself.
 type Env struct {
+	Ctx      context.Context // nil means context.Background()
 	Out, Err io.Writer
 	Getenv   func(string) string
 	Dir      string // relative paths are read against it
@@ -139,6 +141,14 @@ type multi []string
 
 func (m *multi) String() string     { return strings.Join(*m, ",") }
 func (m *multi) Set(v string) error { *m = append(*m, v); return nil }
+
+// context is the run's context: done when the person interrupts the run.
+func (env Env) context() context.Context {
+	if env.Ctx == nil {
+		return context.Background()
+	}
+	return env.Ctx
+}
 
 // abs reads a path against the Env's folder.
 func (env Env) abs(p string) string {

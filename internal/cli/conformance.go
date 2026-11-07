@@ -53,7 +53,7 @@ func runConformance(args []string, env Env) int {
 	if *email != "" && password == "" {
 		return fail(env, usagef("set CONFORMANCE_PASSWORD to the account's password (never a flag)"))
 	}
-	res, err := runner.Run(runner.Options{Target: *target, Origin: *origin, Email: *email, Password: password, Level: *level, JWKSPath: *jwksPath})
+	res, err := runner.Run(env.context(), runner.Options{Target: *target, Origin: *origin, Email: *email, Password: password, Level: *level, JWKSPath: *jwksPath})
 	if errors.Is(err, runner.ErrUsage) {
 		return fail(env, usagef("%s", strings.TrimPrefix(err.Error(), runner.ErrUsage.Error()+": ")))
 	}
