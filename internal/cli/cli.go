@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vennet-developers/cauthy-cli/internal/pact"
 	"github.com/vennet-developers/cauthy-cli/internal/pull"
 )
 
@@ -111,19 +112,20 @@ func Run(args []string, env Env) int {
 	return cmd(args[1:], env)
 }
 
-// errUsage marks an error the person fixes by changing the command line.
-var errUsage = errors.New("usage")
+// usageError is an error the person fixes by changing the command line.
+type usageError struct{ msg string }
 
-func usagef(format string, a ...any) error {
-	return fmt.Errorf("%w: %s", errUsage, fmt.Sprintf(format, a...))
-}
+func (e *usageError) Error() string { return e.msg }
+
+func usagef(format string, a ...any) error { return &usageError{fmt.Sprintf(format, a...)} }
 
 // fail prints an error and answers its exit code: 2 for a usage error or an
 // input that cannot be read, else 1.
 func fail(env Env, err error) int {
-	fmt.Fprintf(env.Err, "cauthy: %s\n", strings.TrimPrefix(err.Error(), errUsage.Error()+": "))
+	fmt.Fprintf(env.Err, "cauthy: %s\n", pact.Clean(err.Error()))
+	var usage *usageError
 	var input *pull.InputError
-	if errors.Is(err, errUsage) || errors.As(err, &input) {
+	if errors.As(err, &usage) || errors.As(err, &input) {
 		return ExitUsage
 	}
 	return ExitFail

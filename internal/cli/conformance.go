@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/vennet-developers/cauthy-cli/internal/pact"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/runner"
 )
 
@@ -60,7 +61,7 @@ func runConformance(args []string, env Env) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	fmt.Fprint(env.Out, res.Text)
+	fmt.Fprint(env.Out, pact.CleanLines(res.Text)) // the details quote the backend's answers
 	if *jsonOut != "" {
 		if err := os.WriteFile(env.abs(*jsonOut), res.JSON, 0o644); err != nil {
 			return fail(env, usagef("%v", err))

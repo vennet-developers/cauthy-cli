@@ -42,6 +42,15 @@ func Clean(s string) string {
 	}, s)
 }
 
+// CleanLines is Clean for text of several lines: the newlines stay.
+func CleanLines(s string) string {
+	lines := strings.Split(s, "\n")
+	for i := range lines {
+		lines[i] = Clean(lines[i])
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Text is one line per check, then the counts, as the runner prints them.
 func (r *Report) Text() string {
 	var b strings.Builder

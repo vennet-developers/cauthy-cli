@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -73,5 +74,20 @@ func TestVersionWithoutADate(t *testing.T) {
 	Run([]string{"version"}, env)
 	if !strings.HasPrefix(out.String(), "cauthy 1.2.3 (0123456789ab)\n") {
 		t.Fatalf("%q", out)
+	}
+}
+
+func TestErrorsCarryNoControlCharacterAndNoPrefix(t *testing.T) {
+	env, _, errOut := testEnv(t, nil)
+	if code := fail(env, errors.New("bad\x1b]0;owned\x07 thing")); code != ExitFail || errOut.String() != "cauthy: bad]0;owned thing\n" {
+		t.Fatalf("%d %q", code, errOut)
+	}
+	errOut.Reset()
+	if code := fail(env, usagef("give --%s", "system")); code != ExitUsage || errOut.String() != "cauthy: give --system\n" {
+		t.Fatalf("%d %q", code, errOut)
+	}
+	var u *usageError
+	if !errors.As(fmt.Errorf("wrapped: %w", usagef("x")), &u) || u.msg != "x" {
+		t.Fatal("a usage error is a *usageError, also wrapped")
 	}
 }

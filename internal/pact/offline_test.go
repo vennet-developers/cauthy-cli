@@ -144,3 +144,9 @@ func TestRootKeyLengthIsInCharacters(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanLinesKeepsTheLines(t *testing.T) {
+	if got := CleanLines("PASS  a\x1b[2J\r\nFAIL  b‮\n"); got != "PASS  a[2J\nFAIL  b\n" {
+		t.Fatalf("%q", got)
+	}
+}
