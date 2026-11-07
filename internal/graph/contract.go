@@ -113,12 +113,19 @@ func (g *Graph) Read(system, link string) (*Contract, error) {
 	if len(c.RedirectURIs) == 0 {
 		return nil, refuse("the link %s names no redirect URI", e.Link)
 	}
-	c.SystemProof = e.SignIn.SystemProof
-	if c.SystemProof == "" {
+	// system_proof says the whole of it; a graph from before it has only the boolean.
+	switch c.SystemProof = e.SignIn.SystemProof; c.SystemProof {
+	case "off", "auto", "required":
+	case "":
 		c.SystemProof = "off"
 		if e.SignIn.RequireSystemProof {
 			c.SystemProof = "required"
 		}
+	default:
+		return nil, refuse("the link %s has system_proof %q: it is off, auto or required. Update cauthy, or pull the graph again", e.Link, c.SystemProof)
+	}
+	if c.SystemProof != "off" && e.Service == nil {
+		return nil, refuse("the link %s asks for the system's proof (%s) and gives %s no identity to make it with: it needs a service block", e.Link, c.SystemProof, system)
 	}
 	c.RequireVerifiedEmail = e.SignIn.RequireVerifiedEmail
 	c.PersistentSessions = e.SignIn.PersistentSessions
@@ -151,35 +158,40 @@ func (g *Graph) Read(system, link string) (*Contract, error) {
 	return c, nil
 }
 
-// readTenant resolves the link's tenant to an id and a slug. A tenant named by
-// its slug carries tenant_id once Cauthy lists it, or create_tenant while it
-// does not exist yet.
+// readTenant resolves the link's tenant to an id and a slug, branch for
+// branch as @cauthyhq/node reads it (src/contract.ts). The link names its
+// tenant by id (the graph lists its slug) or by slug (the graph pins its id
+// as tenant_id). A slug with no tenant_id is a tenant Cauthy has not created
+// yet, or a graph pulled before it was.
 func (c *Contract) readTenant(id *Identity, cauthy *Node) error {
 	if id == nil {
-		return refuse("the link %s has no identity", c.Link)
+		id = &Identity{}
 	}
-	if id.CreateTenant {
-		return refuse("the tenant %q does not exist yet: Cauthy creates it when it applies the link %s, and Vennet registers it; pull the graph again after that", id.Tenant, c.Link)
+	named, pinned := id.Tenant, id.TenantID
+	if named == nilUUID || pinned == nilUUID {
+		return refuse("the link %s names the nil UUID as its tenant: name the tenant by its slug", c.Link)
 	}
-	tenantID := id.TenantID
-	if tenantID == "" && uuidRe.MatchString(id.Tenant) {
-		tenantID = id.Tenant
-	}
-	if tenantID == nilUUID {
-		return refuse("the link %s names the nil UUID as its tenant: a placeholder, not a tenant", c.Link)
-	}
-	for _, t := range cauthy.Tenants {
-		if tenantID != "" && t.ID == tenantID && t.Slug != "" {
-			c.TenantID, c.Tenant = t.ID, t.Slug
-			return nil
+	if uuidRe.MatchString(named) {
+		if pinned != "" && !strings.EqualFold(pinned, named) {
+			return refuse("the link %s names the tenant %s and its tenant_id %s does not match: pull the graph again", c.Link, named, pinned)
 		}
+		for _, t := range cauthy.Tenants {
+			if t.ID == named && t.Slug != "" {
+				c.TenantID, c.Tenant = named, t.Slug
+				return nil
+			}
+		}
+		return refuse("the graph does not name the slug of the tenant %s that the link %s uses", named, c.Link)
 	}
-	shown := tenantID
-	if shown == "" {
-		shown = id.Tenant
+	if !ValidSystemID(named) {
+		return refuse("the link %s names no tenant: identity.tenant is a UUID or a slug", c.Link)
 	}
-	if shown == "" {
-		shown = "(none)"
+	if !uuidRe.MatchString(pinned) {
+		if id.CreateTenant {
+			return refuse("the link %s asks Cauthy for a new tenant %q, and the graph has no tenant_id for it yet: once Cauthy has created it and core-contracts lists it, pull the graph again", c.Link, named)
+		}
+		return refuse("the link %s names the tenant %q by its slug, and the graph carries no tenant_id for it: pull the graph again", c.Link, named)
 	}
-	return refuse("the graph does not name the slug of the tenant %s that the link %s uses", shown, c.Link)
+	c.TenantID, c.Tenant = pinned, named
+	return nil
 }

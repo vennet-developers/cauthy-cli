@@ -94,20 +94,30 @@ func TestReadRefusals(t *testing.T) {
 		link   string
 		want   string
 	}{
-		"bad system id":    {func(*Graph) {}, "Acme CRM", "", "must be its id"},
-		"unknown system":   {func(*Graph) {}, "other", "", `no system "other"`},
-		"no cauthy":        {func(g *Graph) { g.Nodes[0].ID = "idp" }, "acme-crm", "", `no system "cauthy"`},
-		"no link":          {func(g *Graph) { g.Edges[0].SignIn = nil }, "acme-crm", "", "ask Vennet"},
-		"unknown link":     {func(*Graph) {}, "acme-crm", "other-link", `no link "other-link"`},
-		"two links":        {func(g *Graph) { g.Edges = append(g.Edges, g.Edges[0]) }, "acme-crm", "", "has 2 links"},
-		"tenant to create": {func(g *Graph) { g.Edges[0].Identity.Tenant, g.Edges[0].Identity.CreateTenant = "acme-new", true }, "acme-crm", "", `"acme-new" does not exist yet`},
-		"nil tenant":       {func(g *Graph) { g.Edges[0].Identity.Tenant = nilUUID }, "acme-crm", "", "nil UUID"},
-		"unlisted tenant":  {func(g *Graph) { g.Nodes[0].Tenants = nil }, "acme-crm", "", "does not name the slug"},
-		"http issuer":      {func(g *Graph) { g.Nodes[0].URL = "http://id.example.com" }, "acme-crm", "", "must be https"},
-		"no redirect":      {func(g *Graph) { g.Edges[0].SignIn.RedirectURIs = nil }, "acme-crm", "", "names no redirect URI"},
-		"no jwks":          {func(g *Graph) { g.Edges[0].Service.JWKSURL, g.Nodes[1].JWKSURL = "", "" }, "acme-crm", "", "names no jwks_url"},
-		"http jwks":        {func(g *Graph) { g.Edges[0].Service.JWKSURL = "http://crm.example.com/k" }, "acme-crm", "", "jwks_url must be https"},
-		"http events":      {func(g *Graph) { g.Nodes[1].EventsURL = "http://crm.example.com/e" }, "acme-crm", "", "events_url must be https"},
+		"bad system id":  {func(*Graph) {}, "Acme CRM", "", "must be its id"},
+		"unknown system": {func(*Graph) {}, "other", "", `no system "other"`},
+		"no cauthy":      {func(g *Graph) { g.Nodes[0].ID = "idp" }, "acme-crm", "", `no system "cauthy"`},
+		"no link":        {func(g *Graph) { g.Edges[0].SignIn = nil }, "acme-crm", "", "ask Vennet"},
+		"unknown link":   {func(*Graph) {}, "acme-crm", "other-link", `no link "other-link"`},
+		"two links":      {func(g *Graph) { g.Edges = append(g.Edges, g.Edges[0]) }, "acme-crm", "", "has 2 links"},
+		// The tenant's branches, as @cauthyhq/node reads them (src/contract.ts).
+		"tenant to create":       {func(g *Graph) { g.Edges[0].Identity.Tenant, g.Edges[0].Identity.CreateTenant = "acme-new", true }, "acme-crm", "", `asks Cauthy for a new tenant "acme-new"`},
+		"slug without tenant_id": {func(g *Graph) { g.Edges[0].Identity.Tenant = "acme" }, "acme-crm", "", `names the tenant "acme" by its slug, and the graph carries no tenant_id`},
+		"nil tenant":             {func(g *Graph) { g.Edges[0].Identity.Tenant = nilUUID }, "acme-crm", "", "nil UUID"},
+		"nil tenant_id":          {func(g *Graph) { g.Edges[0].Identity.Tenant, g.Edges[0].Identity.TenantID = "acme", nilUUID }, "acme-crm", "", "nil UUID"},
+		"tenant_id differs":      {func(g *Graph) { g.Edges[0].Identity.TenantID = "11111111-1111-4111-8111-111111111111" }, "acme-crm", "", "does not match"},
+		"invalid slug":           {func(g *Graph) { g.Edges[0].Identity.Tenant = "Acme Corp" }, "acme-crm", "", "identity.tenant is a UUID or a slug"},
+		"no identity":            {func(g *Graph) { g.Edges[0].Identity = nil }, "acme-crm", "", "identity.tenant is a UUID or a slug"},
+		"unlisted tenant":        {func(g *Graph) { g.Nodes[0].Tenants = nil }, "acme-crm", "", "does not name the slug"},
+		// The system proof.
+		"unknown system_proof":  {func(g *Graph) { g.Edges[0].SignIn.SystemProof = "sometimes" }, "acme-crm", "", `system_proof "sometimes"`},
+		"proof without service": {func(g *Graph) { g.Edges[0].Service = nil }, "acme-crm", "", "needs a service block"},
+		"auto without service":  {func(g *Graph) { g.Edges[0].Service, g.Edges[0].SignIn.SystemProof = nil, "auto" }, "acme-crm", "", "(auto)"},
+		"http issuer":           {func(g *Graph) { g.Nodes[0].URL = "http://id.example.com" }, "acme-crm", "", "must be https"},
+		"no redirect":           {func(g *Graph) { g.Edges[0].SignIn.RedirectURIs = nil }, "acme-crm", "", "names no redirect URI"},
+		"no jwks":               {func(g *Graph) { g.Edges[0].Service.JWKSURL, g.Nodes[1].JWKSURL = "", "" }, "acme-crm", "", "names no jwks_url"},
+		"http jwks":             {func(g *Graph) { g.Edges[0].Service.JWKSURL = "http://crm.example.com/k" }, "acme-crm", "", "jwks_url must be https"},
+		"http events":           {func(g *Graph) { g.Nodes[1].EventsURL = "http://crm.example.com/e" }, "acme-crm", "", "events_url must be https"},
 	}
 	for name, tc := range cases {
 		g := parsed(t)
@@ -139,6 +149,33 @@ func TestRefusalsNeverShowWhatAnAddressCarries(t *testing.T) {
 		_, err := g.Read("acme-crm", "")
 		if err == nil || strings.Contains(err.Error(), "SECRET") || strings.Contains(err.Error(), "pw") {
 			t.Errorf("got %v", err)
+		}
+	}
+}
+
+func TestReadTenantBranchesThatPass(t *testing.T) {
+	const id = "74851970-8771-438e-a13a-9fb50161b721"
+	for name, tc := range map[string]struct {
+		change func(g *Graph)
+		slug   string
+	}{
+		"uuid, listed":                 {func(*Graph) {}, "acme"},
+		"uuid, tenant_id in uppercase": {func(g *Graph) { g.Edges[0].Identity.TenantID = strings.ToUpper(id) }, "acme"},
+		"slug and tenant_id":           {func(g *Graph) { g.Edges[0].Identity.Tenant, g.Edges[0].Identity.TenantID = "acme", id }, "acme"},
+		"slug and tenant_id, unlisted": {func(g *Graph) {
+			g.Nodes[0].Tenants = nil
+			g.Edges[0].Identity.Tenant, g.Edges[0].Identity.TenantID = "acme", id
+		}, "acme"},
+		"created, tenant_id pinned": {func(g *Graph) {
+			g.Edges[0].Identity.Tenant, g.Edges[0].Identity.TenantID, g.Edges[0].Identity.CreateTenant = "acme-new", id, true
+		}, "acme-new"},
+		"off without service": {func(g *Graph) { g.Edges[0].Service, g.Edges[0].SignIn.RequireSystemProof = nil, false }, "acme"},
+	} {
+		g := parsed(t)
+		tc.change(g)
+		c, err := g.Read("acme-crm", "")
+		if err != nil || c.TenantID != id || c.Tenant != tc.slug {
+			t.Errorf("%s: %v %+v", name, err, c)
 		}
 	}
 }
