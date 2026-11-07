@@ -1,0 +1,5 @@
+dist/
+npm/dist/
+go.work
+go.work.sum
+.DS_Store
