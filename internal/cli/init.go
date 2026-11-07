@@ -188,14 +188,14 @@ func draftContracts(env Env, dir string, req link.Request) error {
 	fmt.Fprintln(env.Out)
 	for _, f := range []scaffold.File{{Path: link.File(req.System), Content: link.YAML(req, subject)}, {Path: link.ManifestFile(req.System), Content: link.Manifest(req)}} {
 		full := filepath.Join(root, filepath.FromSlash(f.Path))
-		if _, err := os.Stat(full); err == nil {
+		if _, err := os.Lstat(full); err == nil {
 			fmt.Fprintf(env.Out, "  kept      %s (it exists: change it by hand)\n", filepath.Join(dir, f.Path))
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(full, []byte(f.Content), 0o644); err != nil {
+		if err := scaffold.CreateNew(full, []byte(f.Content)); err != nil {
 			return err
 		}
 		fmt.Fprintf(env.Out, "  wrote     %s\n", filepath.Join(dir, f.Path))

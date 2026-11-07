@@ -108,3 +108,45 @@ func TestMigrationFollowsTheFolder(t *testing.T) {
 		t.Fatalf("%v %+v", err, fs)
 	}
 }
+
+func TestWritesNeverFollowALink(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "elsewhere")
+	if err := os.WriteFile(outside, []byte("theirs\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "lib", "auth.ts")); err != nil {
+		t.Skip("no symbolic links here:", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, ExampleFile)); err != nil {
+		t.Fatal(err)
+	}
+	for _, force := range []bool{false, true} {
+		if _, err := Write(dir, []File{{"lib/auth.ts", "mine\n"}}, force); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+			t.Fatalf("force %v: %v", force, err)
+		}
+	}
+	if _, err := EnvExample(dir); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("%v", err)
+	}
+	if raw, _ := os.ReadFile(outside); string(raw) != "theirs\n" {
+		t.Fatalf("a link was followed: %q", raw)
+	}
+}
+
+func TestEnvExampleNewAndEmpty(t *testing.T) {
+	dir := t.TempDir()
+	if said, err := EnvExample(dir); err != nil || said != "added" {
+		t.Fatalf("no file: %q %v", said, err)
+	}
+	empty := t.TempDir()
+	if err := os.WriteFile(filepath.Join(empty, ExampleFile), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if said, err := EnvExample(empty); err != nil || said != "added" {
+		t.Fatalf("an empty file: %q %v", said, err)
+	}
+}
