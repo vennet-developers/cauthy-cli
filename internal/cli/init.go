@@ -220,7 +220,7 @@ func nextSteps(env Env, req link.Request, plan scaffold.Plan, migration []scaffo
 	if len(migration) > 0 {
 		steps = append(steps, "Run the migration "+migration[0].Path+" with the application's migration tool.")
 	}
-	steps = append(steps, "Make the root key and put it in the deployment's secret manager as PACT_ROOT_KEY:\n\n  cauthy keys new-root --out pact-root.key")
+	steps = append(steps, "Make the root key outside the repository and put it in the deployment's secret manager as PACT_ROOT_KEY, then delete the file:\n\n  cauthy keys new-root --out ~/.config/cauthy/pact-root.key")
 	steps = append(steps, plan.Steps...)
 	if !pulled {
 		steps = append(steps, "Once the link is merged: cauthy contracts pull --from <core-contracts folder or graph address>")

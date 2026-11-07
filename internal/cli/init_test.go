@@ -45,7 +45,7 @@ func TestInitAsTheOwner(t *testing.T) {
 		"  added     PACT_ROOT_KEY= in " + scaffold.ExampleFile,
 		"graph unversioned → contracts (2 systems, 1 links); every copy identical",
 		"Install: npm install @cauthyhq/node pg",
-		"cauthy keys new-root --out pact-root.key",
+		"cauthy keys new-root --out ~/.config/cauthy/pact-root.key",
 		"cauthy pact check --system acme-crm --live https://crm.example.com",
 	} {
 		if !strings.Contains(text, want) {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 // RootKeyBytes is the root key's size: 32 random bytes, 43 characters in base64url.
@@ -23,9 +24,12 @@ func NewRoot(random io.Reader) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// WriteRoot writes the key to path, readable by its owner only. An existing
-// file is refused unless force.
+// WriteRoot writes the key to path, readable by its owner only, making its
+// folder (owner only) when missing. An existing file is refused unless force.
 func WriteRoot(path, key string, force bool) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
 	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
 	if force {
 		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
@@ -73,11 +77,11 @@ stays published for 24 hours. Then: cauthy pact check --live <app url>.
 const ResealHelp = `cauthy keys reseal does not touch the application's key, by design (see
 cauthy keys rotate). To rotate PACT_ROOT_KEY itself:
 
-  1. cauthy keys new-root --out new-root.key, and put the value in the
-     secret manager as PACT_ROOT_KEY; the old value becomes
-     PACT_ROOT_KEY_PREVIOUS. Deploy.
+  1. cauthy keys new-root --out ~/.config/cauthy/new-root.key (outside the
+     repository), and put the value in the secret manager as PACT_ROOT_KEY;
+     the old value becomes PACT_ROOT_KEY_PREVIOUS. Deploy.
   2. From the running application:
        Node  await auth.pact.keys.reseal()                  // @cauthyhq/node
        Go    n, err := auth.Pact().Keys().Reseal(ctx)      // cauthy-sdk-go
-  3. Remove PACT_ROOT_KEY_PREVIOUS and deploy again. Delete new-root.key.
+  3. Remove PACT_ROOT_KEY_PREVIOUS and deploy again. Delete the key file.
 `

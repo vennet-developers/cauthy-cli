@@ -24,6 +24,17 @@ func TestNewRoot(t *testing.T) {
 	}
 }
 
+func TestWriteRootMakesItsFolder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".config", "cauthy", "pact-root.key")
+	if err := WriteRoot(path, "k", false); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := os.Stat(filepath.Dir(path))
+	if runtime.GOOS != "windows" && st.Mode().Perm() != 0o700 {
+		t.Fatalf("folder mode %v", st.Mode().Perm())
+	}
+}
+
 func TestWriteRoot(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "root.key")
 	if err := WriteRoot(path, "first", false); err != nil {
