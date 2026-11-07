@@ -4,6 +4,11 @@
 version: 2
 project_name: cauthy
 
+metadata:
+  description: "The Cauthy CLI: init, contracts pull, pact check, keys, conformance."
+  homepage: https://github.com/vennet-developers/cauthy-cli
+  license: Apache-2.0
+
 before:
   hooks:
     - go mod tidy -diff
@@ -34,6 +39,7 @@ archives:
     name_template: "cauthy_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE
+      - NOTICE
       - README.md
 
 checksum:

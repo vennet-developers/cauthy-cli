@@ -2,7 +2,7 @@
   "name": "cauthy",
   "version": "0.0.0",
   "description": "The Cauthy CLI: init, contracts pull, pact check, keys, conformance.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "homepage": "https://github.com/vennet-developers/cauthy-cli",
   "repository": {
     "type": "git",
@@ -15,7 +15,9 @@
   "files": [
     "bin",
     "lib/platform.js",
-    "checksums.json"
+    "checksums.json",
+    "LICENSE",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=18"

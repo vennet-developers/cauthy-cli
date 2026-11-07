@@ -17,6 +17,12 @@ const OS = { darwin: 'darwin', linux: 'linux', windows: 'win32' }
 const CPU = { amd64: 'x64', arm64: 'arm64' }
 const here = path.dirname(fileURLToPath(import.meta.url))
 
+// legal copies the repository's LICENSE and NOTICE into a package: Apache-2.0
+// asks that both travel with every copy.
+function legal(dir) {
+  for (const f of ['LICENSE', 'NOTICE']) copyFileSync(path.join(here, '..', '..', f), path.join(dir, f))
+}
+
 export function stage(version, dist, out) {
   if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error(`not a version: ${version}`)
   const artifacts = JSON.parse(readFileSync(path.join(dist, 'artifacts.json'), 'utf8'))
@@ -37,9 +43,10 @@ export function stage(version, dist, out) {
     writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
       name, version,
       description: `The cauthy binary for ${key}. Installed by the cauthy package; not meant to be installed alone.`,
-      license: 'MIT', repository: wrapper.repository,
-      os: [OS[b.goos]], cpu: [CPU[b.goarch]], files: ['bin'], preferUnplugged: true,
+      license: wrapper.license, repository: wrapper.repository,
+      os: [OS[b.goos]], cpu: [CPU[b.goarch]], files: ['bin', 'LICENSE', 'NOTICE'], preferUnplugged: true,
     }, null, 2) + '\n')
+    legal(dir)
     if (!(name in wrapper.optionalDependencies)) throw new Error(`${name} is not in the cauthy package's optionalDependencies`)
     wrapper.optionalDependencies[name] = version
   }
@@ -48,6 +55,7 @@ export function stage(version, dist, out) {
   cpSync(path.join(here, '..', 'cauthy'), dir, { recursive: true, filter: (p) => !p.includes(`${path.sep}test`) })
   writeFileSync(path.join(dir, 'package.json'), JSON.stringify(wrapper, null, 2) + '\n')
   writeFileSync(path.join(dir, 'checksums.json'), JSON.stringify(checksums, null, 2) + '\n')
+  legal(dir)
   return Object.keys(checksums).sort()
 }
 
