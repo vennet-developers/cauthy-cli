@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict'
-// npx cauthy: runs the verified Go binary for this platform with the same
+// npx @cauthyhq/cli (or cauthy, once installed): runs the verified Go binary for this platform with the same
 // arguments, and exits with its code.
 
 const { spawnSync } = require('node:child_process')

@@ -4,7 +4,7 @@
 //   node npm/scripts/stage.mjs <version> <dist folder> <out folder>
 //
 // One package per platform (@cauthyhq/cli-<os>-<cpu>) holding its binary, and
-// the cauthy package with its optionalDependencies pinned to <version> and
+// the @cauthyhq/cli package (its bin is cauthy) with its optionalDependencies pinned to <version> and
 // checksums.json holding each binary's SHA-256. Reads dist/artifacts.json,
 // goreleaser's list of what it built.
 
@@ -30,7 +30,7 @@ export function stage(version, dist, out) {
   if (binaries.length !== 6) throw new Error(`expected 6 binaries in ${dist}/artifacts.json, found ${binaries.length}`)
   rmSync(out, { recursive: true, force: true })
   const checksums = {}
-  const wrapper = JSON.parse(readFileSync(path.join(here, '..', 'cauthy', 'package.json'), 'utf8'))
+  const wrapper = JSON.parse(readFileSync(path.join(here, '..', 'cli', 'package.json'), 'utf8'))
   for (const b of binaries) {
     const key = `${OS[b.goos]}-${CPU[b.goarch]}`
     const name = `@cauthyhq/cli-${key}`
@@ -42,17 +42,17 @@ export function stage(version, dist, out) {
     checksums[key] = createHash('sha256').update(readFileSync(path.join(dir, 'bin', exe))).digest('hex')
     writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
       name, version,
-      description: `The cauthy binary for ${key}. Installed by the cauthy package; not meant to be installed alone.`,
+      description: `The cauthy binary for ${key}. Installed by @cauthyhq/cli; not meant to be installed alone.`,
       license: wrapper.license, repository: wrapper.repository,
       os: [OS[b.goos]], cpu: [CPU[b.goarch]], files: ['bin', 'LICENSE', 'NOTICE'], preferUnplugged: true,
     }, null, 2) + '\n')
     legal(dir)
-    if (!(name in wrapper.optionalDependencies)) throw new Error(`${name} is not in the cauthy package's optionalDependencies`)
+    if (!(name in wrapper.optionalDependencies)) throw new Error(`${name} is not in @cauthyhq/cli's optionalDependencies`)
     wrapper.optionalDependencies[name] = version
   }
   wrapper.version = version
-  const dir = path.join(out, 'cauthy')
-  cpSync(path.join(here, '..', 'cauthy'), dir, { recursive: true, filter: (p) => !p.includes(`${path.sep}test`) })
+  const dir = path.join(out, 'cli')
+  cpSync(path.join(here, '..', 'cli'), dir, { recursive: true, filter: (p) => !p.includes(`${path.sep}test`) })
   writeFileSync(path.join(dir, 'package.json'), JSON.stringify(wrapper, null, 2) + '\n')
   writeFileSync(path.join(dir, 'checksums.json'), JSON.stringify(checksums, null, 2) + '\n')
   legal(dir)
@@ -66,5 +66,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2)
   }
   const staged = stage(version, dist, out)
-  process.stdout.write(`staged cauthy ${version} for ${staged.join(', ')} in ${out}\n`)
+  process.stdout.write(`staged @cauthyhq/cli ${version} for ${staged.join(', ')} in ${out}\n`)
 }

@@ -45,7 +45,7 @@ function resolveBinary(o) {
     throw new Error(`${pkg} is not installed: npm skipped it (--omit=optional or --no-optional?). Install again with optional dependencies.`)
   }
   const want = checksums[key]
-  if (!want) throw new Error(`this cauthy package carries no checksum for ${key}: it was not published by the release workflow`)
+  if (!want) throw new Error(`this @cauthyhq/cli package carries no checksum for ${key}: it was not published by the release workflow`)
   const got = sha256(file)
   if (got !== want) {
     throw new Error(`the cauthy binary at ${file} does not match this release (sha256 ${got}, expected ${want}): reinstall, and report it if it persists`)

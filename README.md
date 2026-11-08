@@ -6,16 +6,16 @@ contract, checks it before and after deploying, and certifies a backend against 
 `auth-bff` protocol.
 
 ```sh
-npx cauthy init --app-url https://crm.example.com --app-url http://localhost:3000
-npx cauthy contracts pull --from ../core-contracts
-npx cauthy pact check --system acme-crm --live https://crm.example.com
+npx @cauthyhq/cli init --app-url https://crm.example.com --app-url http://localhost:3000
+npx @cauthyhq/cli contracts pull --from ../core-contracts
+npx @cauthyhq/cli pact check --system acme-crm --live https://crm.example.com
 ```
 
 ## Install
 
 | How | Command |
 | --- | --- |
-| npm (no install script; the binary comes as a per-platform package and its SHA-256 is checked on every run) | `npx cauthy …` or `npm install -D cauthy` |
+| npm (no install script; the binary comes as a per-platform package and its SHA-256 is checked on every run) | `npx @cauthyhq/cli …`, or `npm install -D @cauthyhq/cli` and then `npx cauthy …` (the command is `cauthy`) |
 | Go | `go install github.com/vennet-developers/cauthy-cli/cmd/cauthy@latest` |
 | Binary | the archive for your platform from the [releases](https://github.com/vennet-developers/cauthy-cli/releases), after verifying it (below) |
 
@@ -62,7 +62,7 @@ The npm packages are published with provenance: `npm audit signatures` checks th
 
 ```sh
 go vet ./... && go test -race ./...
-node --test npm/cauthy/test/platform.test.js npm/scripts/stage.test.mjs
+node --test npm/cli/test/platform.test.js npm/scripts/stage.test.mjs
 goreleaser release --snapshot --clean --skip=sign
 ```
 

@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: 22
       - name: npm wrapper tests
-        run: node --test npm/cauthy/test/platform.test.js npm/scripts/stage.test.mjs
+        run: node --test npm/cli/test/platform.test.js npm/scripts/stage.test.mjs
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
           distribution: goreleaser
@@ -45,4 +45,4 @@ jobs:
         run: |
           ./dist/cauthy_linux_amd64_v1/cauthy version
           node npm/scripts/stage.mjs 0.0.0-snapshot dist npm/dist
-          test -s npm/dist/cauthy/checksums.json
+          test -s npm/dist/cli/checksums.json

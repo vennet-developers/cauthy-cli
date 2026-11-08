@@ -11,7 +11,7 @@ jobs:
     environment: release
     permissions:
       contents: write     # the GitHub release
-      id-token: write     # cosign keyless signing and npm provenance
+      id-token: write     # cosign keyless signing, npm trusted publishing and provenance
       attestations: write # build provenance
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -39,15 +39,20 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      # npm trusted publishing: npm exchanges this job's OIDC token (id-token:
+      # write, environment release) for a one-off publish credential, so no npm
+      # token is stored anywhere. Each package names this repository, this
+      # workflow and the release environment as its trusted publisher on npm.
+      - name: npm with trusted publishing
+        run: npm install -g npm@11.19.1
       - name: publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           tag=latest
           case "$version" in *-*) tag=next ;; esac
           node npm/scripts/stage.mjs "$version" dist npm/dist
+          # The six platform packages first, @cauthyhq/cli (bin: cauthy) last.
           for dir in npm/dist/cli-*; do
             npm publish "$dir" --provenance --access public --tag "$tag"
           done
-          npm publish npm/dist/cauthy --provenance --access public --tag "$tag"
+          npm publish npm/dist/cli --provenance --access public --tag "$tag"
