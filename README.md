@@ -16,6 +16,7 @@ npx @cauthyhq/cli pact check --system acme-crm --live https://crm.example.com
 | How | Command |
 | --- | --- |
 | npm (no install script; the binary comes as a per-platform package and its SHA-256 is checked on every run) | `npx @cauthyhq/cli …`, or `npm install -D @cauthyhq/cli` and then `npx cauthy …` (the command is `cauthy`) |
+| Homebrew (macOS, Linux) | `brew install vennet-developers/tap/cauthy` |
 | Go | `go install github.com/vennet-developers/cauthy-cli/cmd/cauthy@latest` |
 | Binary | the archive for your platform from the [releases](https://github.com/vennet-developers/cauthy-cli/releases), after verifying it (below) |
 
