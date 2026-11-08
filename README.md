@@ -30,6 +30,7 @@ npx @cauthyhq/cli pact check --system acme-crm --live https://crm.example.com
 | `cauthy keys new-root [--out <file>]` | Makes a `PACT_ROOT_KEY` (to a 0600 file with `--out`; keep it outside the repository, such as `~/.config/cauthy/pact-root.key`) |
 | `cauthy keys rotate`, `cauthy keys reseal` | Explain how to rotate from the running application: the CLI never holds the root key |
 | `cauthy conformance --origin <url> --email <account>` | Runs the `auth-bff` conformance suite (password in `CONFORMANCE_PASSWORD`) |
+| `cauthy conformance … --level switches --cauthy <url> --tenant <slug>` | Also checks the backend follows the dashboard switches of a test workspace, and puts them back (admin token in `CAUTHY_ADMIN_TOKEN`) |
 | `cauthy version` | Version, commit, and the protocol version it certifies |
 
 For a Go application, `init` asks you to run `go get github.com/vennet-developers/cauthy-sdk-go@latest`:

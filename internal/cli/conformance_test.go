@@ -75,3 +75,33 @@ func TestConformanceStopsWhenTheContextIsDone(t *testing.T) {
 		t.Fatal("a canceled run drove the backend")
 	}
 }
+
+// With --cauthy and the admin token in CAUTHY_ADMIN_TOKEN, level switches
+// checks the backend follows the dashboard; the token is never printed.
+func TestConformanceSwitches(t *testing.T) {
+	b := runnertest.NewStrictBackend()
+	defer b.Close()
+	c := b.StartCauthy("s3cret-admin")
+	env, out, errOut := testEnv(t, map[string]string{"CONFORMANCE_PASSWORD": b.Password, "CAUTHY_ADMIN_TOKEN": "s3cret-admin"})
+	code := Run([]string{"conformance", "--origin", b.URL, "--email", b.Email, "--level", "switches",
+		"--cauthy", c.URL, "--tenant", c.Tenant, "--client-id", c.ClientID}, env)
+	if code != ExitOK || !strings.Contains(out.String(), "switches.password") {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	if strings.Contains(out.String()+errOut.String(), "s3cret-admin") {
+		t.Fatal("the admin token was printed")
+	}
+}
+
+func TestConformanceSwitchesUsage(t *testing.T) {
+	env, _, errOut := testEnv(t, nil)
+	for _, args := range [][]string{
+		{"conformance", "--origin", "http://localhost:3000", "--level", "switches"},
+		{"conformance", "--origin", "http://localhost:3000", "--cauthy", "http://localhost:8080", "--tenant", "acme"},
+	} {
+		errOut.Reset()
+		if code := Run(args, env); code != ExitUsage {
+			t.Errorf("%v: exit %d %s", args, code, errOut)
+		}
+	}
+}

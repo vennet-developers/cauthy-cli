@@ -1,4 +1,6 @@
 github.com/vennet-developers/cauthy-sdk-spec/conformance v0.1.0 h1:H9NcW7tnr25I+qLXKK//EY5AKb6RNJHEssoSaciM5P0=
 github.com/vennet-developers/cauthy-sdk-spec/conformance v0.1.0/go.mod h1:KawNvKQ2i6mQ3XPpKVW+zPyR509igS+TtnDFRwYgHcg=
+github.com/vennet-developers/cauthy-sdk-spec/conformance v0.4.1 h1:YOu5YqHaw4pCkyRsG2Aonq10czYZOuebgTFyL1vyyFE=
+github.com/vennet-developers/cauthy-sdk-spec/conformance v0.4.1/go.mod h1:KawNvKQ2i6mQ3XPpKVW+zPyR509igS+TtnDFRwYgHcg=
 go.yaml.in/yaml/v3 v3.0.6 h1:zcDfvjXEqTQmpjniUBLc91xYJMB2c4QOFxEF/LCEckM=
 go.yaml.in/yaml/v3 v3.0.6/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
