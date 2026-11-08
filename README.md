@@ -33,9 +33,7 @@ npx @cauthyhq/cli pact check --system acme-crm --live https://crm.example.com
 | `cauthy conformance … --level switches --cauthy <url> --tenant <slug>` | Also checks the backend follows the dashboard switches of a test workspace, and puts them back (admin token in `CAUTHY_ADMIN_TOKEN`) |
 | `cauthy version` | Version, commit, and the protocol version it certifies |
 
-For a Go application, `init` asks you to run `go get github.com/vennet-developers/cauthy-sdk-go@latest`:
-that works once cauthy-sdk-go 1.0 is published. Until then, the Node wiring is the one
-to use.
+For a Go application, `init` asks you to run `go get github.com/vennet-developers/cauthy-sdk-go@latest`.
 
 Exit codes: `0` ok; `1` a check failed, or the application would refuse to start;
 `2` usage or an unreadable input; `3` nothing failed, but a check that was asked for
