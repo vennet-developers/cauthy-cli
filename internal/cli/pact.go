@@ -8,23 +8,27 @@ import (
 
 	"github.com/vennet-developers/cauthy-cli/internal/graph"
 	"github.com/vennet-developers/cauthy-cli/internal/pact"
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/cauthykey"
 )
 
 const pactHelp = `cauthy pact check --system <id> [--graph <file>] [--link <id>] [--offline]
                   [--live <app url>] [--base-path /api/auth] [--level basic|strict]
 
 Says what the application's contract is, as its SDK will read it, and
-whether the environment would make it refuse to start. Never prints a
-variable's value.
+whether the environment would make it refuse to start: CAUTHY_KEY parses
+and names the contract's Cauthy, and no variable it replaces is set beside
+it (PACT_ROOT_KEY is deprecated). Never prints a variable's value.
 
 With CAUTHY_TOKEN (a personal access token with oauth_clients:manage) it asks
-Cauthy how the system stands (GET /v1/pact/status). Without it that check
-is skipped and the run exits 3, unless --offline says not to ask.
+Cauthy how the system stands (GET /v1/pact/status), and the keys registered
+for it against the ones it publishes. Without it that check is skipped and
+the run exits 3, unless --offline says not to ask.
 
---live probes the deployed application: its jwks_url publishes RS256 public
-keys only, <base-path>/session answers the protocol (with Cauthy-Protocol: 1
-at level strict), and <base-path>/login sends people to Cauthy with the
-contract's client and PKCE.
+--live probes the deployed application: its jwks_url publishes the public
+half of CAUTHY_KEY (its Ed25519 key, by its key id; RS256 keys only without
+CAUTHY_KEY) and no private member, <base-path>/session answers the protocol
+(with Cauthy-Protocol: 1 at level strict), and <base-path>/login sends
+people to Cauthy with the contract's client and PKCE.
 
   --graph   default contracts/graph.json (cauthy contracts pull writes it)
   --link    the link, when the system has several with Cauthy
@@ -89,7 +93,11 @@ func runPact(args []string, env Env) int {
 		fmt.Fprint(env.Out, "\n"+status)
 	}
 	if *live != "" {
-		pact.Live(r, env.HTTP, c, *live, *base, *level)
+		kid := ""
+		if k, err := cauthykey.Parse(env.Getenv("CAUTHY_KEY")); err == nil {
+			kid = k.Derive().KID
+		}
+		pact.Live(r, env.HTTP, c, *live, *base, *level, kid)
 	}
 	fmt.Fprint(env.Out, "\n"+r.Text())
 	return r.ExitCode()

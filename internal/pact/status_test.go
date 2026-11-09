@@ -76,3 +76,26 @@ func TestStatusFollowsNoRedirectOffHTTPS(t *testing.T) {
 		t.Fatalf("%+v", l)
 	}
 }
+
+// The status's keys block: the kids registered on the service client and
+// the ones published at its jwks_url.
+func TestStatusShowsTheKeys(t *testing.T) {
+	answer := `{"data":{"system":"acme-crm","in_step":true,"reconciled_at":null,"outside":[],"missing":[],
+	  "keys":{"registered":["kid-a"],"published":["kid-a"],"missing":[],"outside":[],"matches":true}}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, answer) }))
+	defer srv.Close()
+	c := contract()
+	c.Issuer = srv.URL
+	r := &Report{}
+	text := CheckStatus(r, srv.Client(), c, "t", false)
+	if !strings.Contains(text, "Keys (CAUTHY_KEY): registered kid-a; published kid-a; they match.\n") {
+		t.Fatalf("%q %+v", text, r.Lines)
+	}
+	answer = `{"data":{"system":"acme-crm","in_step":false,"reconciled_at":null,"outside":[],
+	  "missing":[{"kind":"key","client_id":"pact.acme-crm-signs-in-with-cauthy.service","value":"kid-b"}],
+	  "keys":{"registered":["kid-b"],"published":[],"missing":["kid-b"],"outside":[],"matches":false}}}`
+	text = CheckStatus(&Report{}, srv.Client(), c, "t", false)
+	if !strings.Contains(text, "Keys (CAUTHY_KEY): registered kid-b; published none; they do not match.\n") {
+		t.Fatalf("%q", text)
+	}
+}

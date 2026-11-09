@@ -27,6 +27,32 @@ type Status struct {
 	ReconciledAt *string `json:"reconciled_at"`
 	Outside      []Item  `json:"outside"`
 	Missing      []Item  `json:"missing"`
+	// Keys: the CAUTHY_KEY of the system's service client, registered in
+	// Cauthy and published at its jwks_url. Nil before it has one.
+	Keys *Keys `json:"keys"`
+}
+
+// Keys is how the kids registered in Cauthy and the ones published compare.
+type Keys struct {
+	Registered []string `json:"registered"`
+	Published  []string `json:"published"`
+	Missing    []string `json:"missing"`
+	Outside    []string `json:"outside"`
+	Matches    bool     `json:"matches"`
+}
+
+func (k *Keys) text() string {
+	list := func(s []string) string {
+		if len(s) == 0 {
+			return "none"
+		}
+		return strings.Join(s, ", ")
+	}
+	match := "they match"
+	if !k.Matches {
+		match = "they do not match"
+	}
+	return Clean(fmt.Sprintf("Keys (CAUTHY_KEY): registered %s; published %s; %s.", list(k.Registered), list(k.Published), match)) + "\n"
 }
 
 // FetchStatus asks Cauthy how the system stands. The token never appears in
@@ -64,6 +90,14 @@ func FetchStatus(client *http.Client, c *graph.Contract, token string) (*Status,
 
 // DescribeStatus is how the system stands, in lines.
 func DescribeStatus(s *Status) string {
+	keys := ""
+	if s.Keys != nil {
+		keys = s.Keys.text()
+	}
+	return describeItems(s) + keys
+}
+
+func describeItems(s *Status) string {
 	if s.InStep {
 		if s.ReconciledAt != nil {
 			return fmt.Sprintf("In step with its contract (last daily check %s).\n", Clean(*s.ReconciledAt))

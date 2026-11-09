@@ -1,11 +1,14 @@
 package pact
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/vennet-developers/cauthy-cli/internal/graph"
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/cauthykey"
 )
 
 // StandardVariables are the variables of the SDKs' variables mode. With a
@@ -13,6 +16,16 @@ import (
 var StandardVariables = []string{
 	"CAUTHY_ISSUER", "CAUTHY_CLIENT_ID", "CAUTHY_CLIENT_SECRET", "CAUTHY_SECRET",
 	"CAUTHY_SYSTEM", "CAUTHY_TENANT", "CAUTHY_SYSTEM_KEY", "CAUTHY_SYSTEM_KEY_ID",
+}
+
+// KeyReplaces are the variables an SDK refuses beside CAUTHY_KEY
+// (key/cauthy-key.md §10 in cauthy-sdk-spec). CAUTHY_SECRET and
+// PACT_ROOT_KEY are not among them: beside the key they only read the old
+// sessions while an application moves (refused in 2.0).
+var KeyReplaces = []string{
+	"CAUTHY_ISSUER", "CAUTHY_CLIENT_ID", "CAUTHY_CLIENT_SECRET", "CAUTHY_SYSTEM",
+	"CAUTHY_TENANT", "CAUTHY_SYSTEM_KEY", "CAUTHY_SYSTEM_KEY_ID", "CAUTHY_BASE_URL",
+	"CAUTHY_AUDIENCE", "CAUTHY_TENANT_ID",
 }
 
 // MinRootKey is the shortest PACT_ROOT_KEY an SDK accepts.
@@ -49,6 +62,31 @@ func Describe(c *graph.Contract) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
+// cauthyKey checks the application's CAUTHY_KEY: it parses, and names the
+// contract's Cauthy. Never more than its client and key id is said.
+func cauthyKey(r *Report, c *graph.Contract, value string) {
+	const id = "env.cauthy_key"
+	if value == "" {
+		r.Add(id, Advisory, "no CAUTHY_KEY in this environment (set it where the application runs)")
+		return
+	}
+	k, err := cauthykey.Parse(value)
+	if err != nil {
+		var ke *cauthykey.Error
+		if errors.As(err, &ke) {
+			r.Add(id, Fail, "%s (%s): copy it again from the dashboard", strings.TrimPrefix(ke.Msg, "CAUTHY_KEY: "), ke.Reason)
+		} else {
+			r.Add(id, Fail, "CAUTHY_KEY cannot be read")
+		}
+		return
+	}
+	if strings.TrimRight(c.Issuer, "/") != k.Issuer {
+		r.Add(id, Fail, "the key names Cauthy at %s, the contract's Cauthy is %s (key_contract_issuer)", k.Issuer, c.Issuer)
+		return
+	}
+	r.Add(id, Pass, "CAUTHY_KEY names the contract's Cauthy (client %s, key id %s)", k.ClientID, k.Derive().KID)
+}
+
 func yesNo(b bool, yes, no string) string {
 	if b {
 		return yes
@@ -60,26 +98,45 @@ func yesNo(b bool, yes, no string) string {
 // application would start in, and what the link leaves weak. It never prints
 // a variable's value.
 func Offline(r *Report, c *graph.Contract, getenv func(string) string) {
-	var set []string
-	for _, name := range StandardVariables {
-		if getenv(name) != "" {
-			set = append(set, name)
+	key := getenv("CAUTHY_KEY")
+	cauthyKey(r, c, key)
+	if key != "" {
+		var set []string
+		for _, name := range KeyReplaces {
+			if getenv(name) != "" {
+				set = append(set, name)
+			}
+		}
+		if len(set) > 0 {
+			r.Add("env.standard_variables", Fail, "%s set beside CAUTHY_KEY: the SDK refuses to start with them; remove them", strings.Join(slices.Sorted(slices.Values(set)), ", "))
+		} else {
+			r.Add("env.standard_variables", Pass, "no variable CAUTHY_KEY replaces is set beside it")
+		}
+		if getenv("CAUTHY_SECRET") != "" {
+			r.Add("env.previous_secret", Advisory, "CAUTHY_SECRET beside CAUTHY_KEY only reads the sessions made before the move; remove it once they have expired")
+		}
+	} else {
+		var set []string
+		for _, name := range StandardVariables {
+			if getenv(name) != "" {
+				set = append(set, name)
+			}
+		}
+		if len(set) > 0 {
+			r.Add("env.variables_mode", Fail, "%s set: the SDK refuses to start by contract with them; remove them", strings.Join(set, ", "))
+		} else {
+			r.Add("env.variables_mode", Pass, "no CAUTHY_* variable of the variables mode is set")
 		}
 	}
-	if len(set) > 0 {
-		r.Add("env.variables_mode", Fail, "%s set: the SDK refuses to start by contract with them; remove them", strings.Join(set, ", "))
-	} else {
-		r.Add("env.variables_mode", Pass, "no CAUTHY_* variable of the variables mode is set")
-	}
 
+	const deprecated = "PACT_ROOT_KEY is deprecated: generate CAUTHY_KEY on the application's card (Integrate → Applications in Cauthy's dashboard)"
 	root, previous := getenv("PACT_ROOT_KEY"), getenv("PACT_ROOT_KEY_PREVIOUS")
 	switch {
 	case root == "":
-		r.Add("env.root_key", Advisory, "PACT_ROOT_KEY is not set in this shell; the deployment must set it (cauthy keys new-root makes one)")
 	case utf8.RuneCountInString(root) < MinRootKey:
-		r.Add("env.root_key", Fail, "PACT_ROOT_KEY is too short: at least %d characters (cauthy keys new-root makes one)", MinRootKey)
+		r.Add("env.root_key", Fail, "PACT_ROOT_KEY is too short: at least %d characters. %s", MinRootKey, deprecated)
 	default:
-		r.Add("env.root_key", Pass, "PACT_ROOT_KEY is set and long enough")
+		r.Add("env.root_key", Advisory, "%s", deprecated)
 	}
 	switch {
 	case previous == "":

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/cauthykey"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/runner/runnertest"
 )
 
@@ -103,5 +104,31 @@ func TestConformanceSwitchesUsage(t *testing.T) {
 		if code := Run(args, env); code != ExitUsage {
 			t.Errorf("%v: exit %d %s", args, code, errOut)
 		}
+	}
+}
+
+// --key-env hands the runner the key the backend runs on: the key.* checks
+// run, and the key is never printed.
+func TestConformanceKeyEnv(t *testing.T) {
+	b := runnertest.NewBackend()
+	defer b.Close()
+	c := b.StartCauthy("admin-token")
+	key := b.IssueKey(c.URL)
+	k, _ := cauthykey.Parse(key)
+	env, out, errOut := testEnv(t, map[string]string{"CONFORMANCE_PASSWORD": b.Password, "CONFORMANCE_KEY": key})
+	if code := Run([]string{"conformance", "--origin", b.URL, "--email", b.Email, "--key-env", "CONFORMANCE_KEY"}, env); code != ExitOK {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	for _, want := range []string{"key.parses", "key.identity", "key.signs_in"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	if strings.Contains(out.String()+errOut.String(), k.Secret) {
+		t.Fatal("the key was printed")
+	}
+	env, _, errOut = testEnv(t, map[string]string{"CONFORMANCE_PASSWORD": b.Password})
+	if code := Run([]string{"conformance", "--origin", b.URL, "--key-env", "CONFORMANCE_KEY"}, env); code != ExitUsage || !strings.Contains(errOut.String(), "--key-env CONFORMANCE_KEY: the variable is empty") {
+		t.Fatalf("exit %d %s", code, errOut)
 	}
 }

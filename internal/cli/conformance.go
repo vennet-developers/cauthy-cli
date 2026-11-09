@@ -15,6 +15,7 @@ import (
 const conformanceHelp = `cauthy conformance --origin <app url> [--target <url>] [--email <address>]
                    [--level basic|strict|switches] [--json <file>] [--jwks-path <path>]
                    [--cauthy <url> --tenant <slug> [--client-id <id>] [--switch-wait 10s]]
+                   [--key-env <name>]
 
 Certifies a backend against the auth-bff protocol: the suite of
 cauthy-sdk-spec, driving the backend as a black box.
@@ -33,6 +34,10 @@ cauthy-sdk-spec, driving the backend as a black box.
   --tenant     the backend's workspace slug in Cauthy
   --client-id  the backend's OAuth client, for the persistent-sessions switch
   --switch-wait  how long the backend has to follow a switch (default 10s)
+  --key-env    the variable holding the CAUTHY_KEY the backend runs on: adds
+               the key.* checks (the key parses, Cauthy knows it, a sign-in
+               needs nothing else, and with --jwks-path its public half is
+               published); never printed
 
 The account's password is read from CONFORMANCE_PASSWORD, and with --cauthy
 an admin token of the tenant from CAUTHY_ADMIN_TOKEN; never flags. Use a
@@ -56,6 +61,7 @@ func runConformance(args []string, env Env) int {
 	tenant := fs.String("tenant", "", "")
 	clientID := fs.String("client-id", "", "")
 	switchWait := fs.Duration("switch-wait", 10*time.Second, "")
+	keyEnv := fs.String("key-env", "", "")
 	if code, done := parse(fs, args, env, conformanceHelp); done {
 		return code
 	}
@@ -75,8 +81,14 @@ func runConformance(args []string, env Env) int {
 			return fail(env, usagef("set CAUTHY_ADMIN_TOKEN to an admin token of the tenant (never a flag)"))
 		}
 	}
+	var key string
+	if *keyEnv != "" {
+		if key = env.Getenv(*keyEnv); key == "" {
+			return fail(env, usagef("--key-env %s: the variable is empty", *keyEnv))
+		}
+	}
 	res, err := runner.Run(env.context(), runner.Options{Target: *target, Origin: *origin, Email: *email, Password: password, Level: *level, JWKSPath: *jwksPath,
-		Cauthy: *cauthy, Tenant: *tenant, AdminToken: adminToken, ClientID: *clientID, SwitchWait: *switchWait})
+		Cauthy: *cauthy, Tenant: *tenant, AdminToken: adminToken, ClientID: *clientID, SwitchWait: *switchWait, Key: key})
 	if errors.Is(err, runner.ErrUsage) {
 		return fail(env, usagef("%s", strings.TrimPrefix(err.Error(), runner.ErrUsage.Error()+": ")))
 	}

@@ -20,6 +20,7 @@ const ProtocolHeader = "Cauthy-Protocol"
 
 type jwk struct {
 	Kty string `json:"kty"`
+	Crv string `json:"crv"`
 	Alg string `json:"alg"`
 	Kid string `json:"kid"`
 	N   string `json:"n"`
@@ -34,8 +35,9 @@ type jwk struct {
 }
 
 // Live probes the deployed application at app (its origin); base is the
-// protocol's prefix (/api/auth) and level "basic" or "strict".
-func Live(r *Report, client *http.Client, c *graph.Contract, app, base, level string) {
+// protocol's prefix (/api/auth) and level "basic" or "strict". kid is the
+// key id of the application's CAUTHY_KEY ("" when it runs on PACT_ROOT_KEY).
+func Live(r *Report, client *http.Client, c *graph.Contract, app, base, level, kid string) {
 	origin, err := graph.HTTPSAddress(app, "--live address")
 	if err != nil {
 		r.Add("live.address", Fail, "%v", err)
@@ -44,7 +46,7 @@ func Live(r *Report, client *http.Client, c *graph.Contract, app, base, level st
 	prefix := origin.Scheme + "://" + origin.Host + base
 	noRedirect := *client
 	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	liveJWKS(r, &noRedirect, c)
+	liveJWKS(r, &noRedirect, c, kid)
 	liveSession(r, &noRedirect, prefix, level)
 	liveSignIn(r, &noRedirect, c, prefix)
 }
@@ -64,7 +66,7 @@ func get(client *http.Client, target string) (*http.Response, []byte, error) {
 	return res, body, err
 }
 
-func liveJWKS(r *Report, client *http.Client, c *graph.Contract) {
+func liveJWKS(r *Report, client *http.Client, c *graph.Contract, kid string) {
 	const id = "live.jwks"
 	if c.JWKSURL == "" {
 		r.Add(id, NA, "the link has no service block: the application publishes no key")
@@ -89,9 +91,21 @@ func liveJWKS(r *Report, client *http.Client, c *graph.Contract) {
 	}
 	for _, k := range set.Keys {
 		if k.D != "" || k.P != "" || k.Q != "" || k.DP != "" || k.DQ != "" || k.QI != "" {
-			r.Add(id, Fail, "%s publishes PRIVATE key material (kid %s): take it down, then rotate the key and PACT_ROOT_KEY", shown, k.Kid)
+			r.Add(id, Fail, "%s publishes PRIVATE key material (kid %s): take it down, then rotate the key", shown, k.Kid)
 			return
 		}
+	}
+	if kid != "" {
+		// On CAUTHY_KEY: the key's Ed25519 public half, by its kid (the
+		// runner's key.jwks rule). Other keys may stand beside it.
+		for _, k := range set.Keys {
+			if k.Kty == "OKP" && k.Crv == "Ed25519" && k.Kid == kid {
+				r.Add(id, Pass, "the key is published: %s at %s", kid, shown)
+				return
+			}
+		}
+		r.Add(id, Fail, "the key's public half (kid %s) is not in the JWKS at %s: deploy with the same CAUTHY_KEY", kid, shown)
+		return
 	}
 	if len(set.Keys) == 0 {
 		r.Add(id, Fail, "%s publishes no key", shown)

@@ -77,7 +77,7 @@ func TestLiveWellDeployed(t *testing.T) {
 	srv, c := serve(t, a)
 	defer srv.Close()
 	r := &Report{}
-	Live(r, srv.Client(), c, srv.URL, "/api/auth", "strict")
+	Live(r, srv.Client(), c, srv.URL, "/api/auth", "strict", "")
 	if r.ExitCode() != 0 {
 		t.Fatalf("%s", r.Text())
 	}
@@ -115,7 +115,7 @@ func TestLiveFindsWhatIsWrong(t *testing.T) {
 		a := tc.a
 		srv, c := serve(t, &a)
 		r := &Report{}
-		Live(r, srv.Client(), c, srv.URL, "/api/auth", tc.level)
+		Live(r, srv.Client(), c, srv.URL, "/api/auth", tc.level, "")
 		srv.Close()
 		if l := line(r, tc.id); l.Status != tc.status || !strings.Contains(l.Detail, tc.detail) {
 			t.Errorf("%s: %+v, want %s with %q", name, l, tc.status, tc.detail)
@@ -125,7 +125,7 @@ func TestLiveFindsWhatIsWrong(t *testing.T) {
 
 func TestLiveRefusesAPlainHTTPAddress(t *testing.T) {
 	r := &Report{}
-	Live(r, http.DefaultClient, contract(), "http://crm.example.com", "/api/auth", "basic")
+	Live(r, http.DefaultClient, contract(), "http://crm.example.com", "/api/auth", "basic", "")
 	if l := line(r, "live.address"); l.Status != Fail {
 		t.Fatalf("%+v", r.Lines)
 	}
@@ -135,11 +135,41 @@ func TestLiveNeverShowsWhatAnAddressCarries(t *testing.T) {
 	c := contract()
 	c.JWKSURL = "https://127.0.0.1:1/.well-known/pact-jwks.json?token=SECRET"
 	r := &Report{}
-	Live(r, http.DefaultClient, c, "https://127.0.0.1:1", "/api/auth", "basic")
+	Live(r, http.DefaultClient, c, "https://127.0.0.1:1", "/api/auth", "basic", "")
 	if l := line(r, "live.jwks"); l.Status != Fail || strings.Contains(l.Detail, "SECRET") || !strings.Contains(l.Detail, "pact-jwks.json") {
 		t.Fatalf("%+v", l)
 	}
 	if strings.Contains(r.Text(), "SECRET") {
 		t.Fatalf("%s", r.Text())
+	}
+}
+
+// On CAUTHY_KEY the jwks_url publishes the key's Ed25519 public half, by its kid.
+func TestLiveJWKSOfACauthyKey(t *testing.T) {
+	const kid = "dVpPrRtlQgOGn_9Q6DE2cgFRjUetrT2WPZCQyM48luc"
+	okp := map[string]string{"kty": "OKP", "crv": "Ed25519", "kid": kid, "x": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg"}
+	leaked := map[string]string{"d": "AA"}
+	for k, v := range okp {
+		leaked[k] = v
+	}
+	cases := map[string]struct {
+		keys   []map[string]string
+		status string
+		detail string
+	}{
+		"published":        {[]map[string]string{okp}, Pass, "the key is published: " + kid},
+		"beside an RS256":  {[]map[string]string{publicJWK(t, 2048), okp}, Pass, kid},
+		"another key":      {[]map[string]string{publicJWK(t, 2048)}, Fail, "(kid " + kid + ") is not in the JWKS"},
+		"private material": {[]map[string]string{leaked}, Fail, "PRIVATE key material"},
+	}
+	for name, tc := range cases {
+		a := &app{keys: tc.keys, protocol: "1"}
+		srv, c := serve(t, a)
+		r := &Report{}
+		Live(r, srv.Client(), c, srv.URL, "/api/auth", "basic", kid)
+		srv.Close()
+		if l := line(r, "live.jwks"); l.Status != tc.status || !strings.Contains(l.Detail, tc.detail) {
+			t.Errorf("%s: %+v, want %s with %q", name, l, tc.status, tc.detail)
+		}
 	}
 }

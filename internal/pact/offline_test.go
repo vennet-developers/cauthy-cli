@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/vennet-developers/cauthy-cli/internal/graph"
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/cauthykey"
 )
 
 // contract is Acme CRM's contract as graph.Read answers it.
@@ -71,7 +72,7 @@ func TestOfflineNeverPrintsAValue(t *testing.T) {
 	if l := line(r, "env.variables_mode"); l.Status != Fail || l.Detail != "CAUTHY_ISSUER, CAUTHY_SECRET set: the SDK refuses to start by contract with them; remove them" {
 		t.Fatalf("%+v", l)
 	}
-	if l := line(r, "env.root_key"); l.Status != Pass {
+	if l := line(r, "env.root_key"); l.Status != Advisory {
 		t.Fatalf("%+v", l)
 	}
 	if text := r.Text(); strings.Contains(text, secret) || strings.Contains(text, "s3cret-value") {
@@ -87,7 +88,8 @@ func TestOfflineRootKeys(t *testing.T) {
 		vars       map[string]string
 		id, status string
 	}{
-		{map[string]string{}, "env.root_key", Advisory},
+		{map[string]string{}, "env.root_key", ""},
+		{map[string]string{"PACT_ROOT_KEY": strings.Repeat("a", 43)}, "env.root_key", Advisory},
 		{map[string]string{"PACT_ROOT_KEY": "short"}, "env.root_key", Fail},
 		{map[string]string{"PACT_ROOT_KEY": strings.Repeat("a", 43), "PACT_ROOT_KEY_PREVIOUS": "short"}, "env.root_key_previous", Fail},
 		{map[string]string{"PACT_ROOT_KEY": strings.Repeat("a", 43), "PACT_ROOT_KEY_PREVIOUS": strings.Repeat("a", 43)}, "env.root_key_previous", Advisory},
@@ -105,6 +107,9 @@ func TestOfflineRootKeys(t *testing.T) {
 	r := &Report{}
 	Offline(r, weak, env(nil))
 	if line(r, "link.system_proof").Status != Advisory || line(r, "link.verified_email").Status != Advisory || r.ExitCode() != 0 {
+		t.Fatalf("%+v", r.Lines)
+	}
+	if l := line(r, "env.cauthy_key"); l.Status != Advisory || l.Detail != "no CAUTHY_KEY in this environment (set it where the application runs)" {
 		t.Fatalf("%+v", r.Lines)
 	}
 }
@@ -148,5 +153,74 @@ func TestRootKeyLengthIsInCharacters(t *testing.T) {
 func TestCleanLinesKeepsTheLines(t *testing.T) {
 	if got := CleanLines("PASS  a\x1b[2J\r\nFAIL  b‮\n"); got != "PASS  a[2J\nFAIL  b\n" {
 		t.Fatalf("%q", got)
+	}
+}
+
+// Keys of the spec's vectors (test values, never real keys): the secret is
+// the bytes 00 01 … 1f.
+const (
+	keySecret = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+	keyClient = "client_0123456789abcdef0123456789abcdef"
+	// otherIssuerKey is the valid/basic vector: Cauthy at https://cauthy.api.example.com.
+	otherIssuerKey = "cauthy1.aHR0cHM6Ly9jYXV0aHkuYXBpLmV4YW1wbGUuY29t.Y2xpZW50XzAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVm.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8.AAvYhJZh"
+	damagedKey     = "cauthy1.aHR0cHM6Ly9jYXV0aHkuYXBpLmV4YW1wbGUuY29t.Y2xpZW50XzAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVm.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8.AAvYhJZi"
+)
+
+// contractKey is a key for the contract's Cauthy.
+func contractKey(t *testing.T) string {
+	t.Helper()
+	k, err := cauthykey.Compose(contract().Issuer, keyClient, keySecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
+}
+
+func TestOfflineCauthyKey(t *testing.T) {
+	good := contractKey(t)
+	cases := []struct {
+		key, status, detail string
+	}{
+		{good, Pass, "client " + keyClient},
+		{otherIssuerKey, Fail, "key_contract_issuer"},
+		{damagedKey, Fail, "key_checksum"},
+	}
+	for _, tc := range cases {
+		r := &Report{}
+		Offline(r, contract(), env(map[string]string{"CAUTHY_KEY": tc.key}))
+		l := line(r, "env.cauthy_key")
+		if l.Status != tc.status || !strings.Contains(l.Detail, tc.detail) {
+			t.Errorf("%s: %+v, want %s with %q", tc.detail, l, tc.status, tc.detail)
+		}
+		if strings.Contains(r.Text(), keySecret) || strings.Contains(r.Text(), tc.key) {
+			t.Fatalf("the key was printed:\n%s", r.Text())
+		}
+	}
+}
+
+// Beside CAUTHY_KEY the SDK refuses spec §10's variables; CAUTHY_SECRET and
+// PACT_ROOT_KEY only read the old sessions while the application moves.
+func TestOfflineVariablesBesideTheKey(t *testing.T) {
+	r := &Report{}
+	Offline(r, contract(), env(map[string]string{"CAUTHY_KEY": contractKey(t), "CAUTHY_CLIENT_ID": "x", "CAUTHY_BASE_URL": "https://crm.example.com"}))
+	if l := line(r, "env.standard_variables"); l.Status != Fail || !strings.Contains(l.Detail, "CAUTHY_BASE_URL, CAUTHY_CLIENT_ID set beside CAUTHY_KEY") {
+		t.Fatalf("%+v", l)
+	}
+	r = &Report{}
+	Offline(r, contract(), env(map[string]string{"CAUTHY_KEY": contractKey(t), "CAUTHY_SECRET": strings.Repeat("s", 32), "PACT_ROOT_KEY": strings.Repeat("a", 43)}))
+	if l := line(r, "env.standard_variables"); l.Status != Pass {
+		t.Fatalf("%+v", l)
+	}
+	if l := line(r, "env.root_key"); l.Status != Advisory || !strings.Contains(l.Detail, "PACT_ROOT_KEY is deprecated: generate CAUTHY_KEY on the application's card") {
+		t.Fatalf("%+v", l)
+	}
+	if l := line(r, "env.previous_secret"); l.Status != Advisory {
+		t.Fatalf("%+v", r.Lines)
+	}
+	if line(r, "env.variables_mode").ID != "" {
+		t.Fatalf("with a key the variables mode is not checked: %+v", r.Lines)
+	}
+	if r.ExitCode() != 0 {
+		t.Fatalf("%s", r.Text())
 	}
 }

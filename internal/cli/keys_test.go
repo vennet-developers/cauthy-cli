@@ -16,10 +16,16 @@ func TestKeysNewRoot(t *testing.T) {
 	if len(key) != 43 || !strings.Contains(errOut.String(), "This is a new PACT_ROOT_KEY") || strings.Contains(errOut.String(), key) {
 		t.Fatalf("stdout %q stderr %q", out, errOut)
 	}
+	if !strings.Contains(errOut.String(), deprecatedNewRoot) {
+		t.Fatalf("no deprecation: %q", errOut)
+	}
 
 	env, out, errOut = testEnv(t, nil)
 	if code := Run([]string{"keys", "new-root", "--out", "root.key"}, env); code != ExitOK {
 		t.Fatalf("exit %d %s", code, errOut)
+	}
+	if !strings.Contains(errOut.String(), deprecatedNewRoot) {
+		t.Fatalf("no deprecation: %q", errOut)
 	}
 	written, _ := os.ReadFile(filepath.Join(env.Dir, "root.key"))
 	if len(strings.TrimSpace(string(written))) != 43 || strings.Contains(out.String()+errOut.String(), strings.TrimSpace(string(written))) {
@@ -44,3 +50,5 @@ func TestKeysRotateAndResealOnlyExplain(t *testing.T) {
 		}
 	}
 }
+
+const deprecatedNewRoot = "cauthy: keys new-root is deprecated: CAUTHY_KEY replaces PACT_ROOT_KEY. Make the key on the application's card in Cauthy's dashboard (Integrate → Applications).\n"
