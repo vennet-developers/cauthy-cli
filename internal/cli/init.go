@@ -28,8 +28,8 @@ and:
      manifest into that core-contracts checkout (for Vennet's team);
      otherwise it prints the connection request the owner emails to Vennet;
   2. writes the auth wiring for the framework (@cauthyhq/node or
-     cauthy-sdk-go), the cauthy_pact_keys migration, and the line
-     PACT_ROOT_KEY= in .env.example (never a value);
+     cauthy-sdk-go: the contract on top of CAUTHY_KEY, no key store) and the
+     line CAUTHY_KEY= in .env.example (never a value);
   3. runs cauthy contracts pull when the contracts are at hand.
 
 It never writes over a file without --force, and never over a link or a
@@ -142,17 +142,13 @@ func runInit(args []string, env Env) int {
 
 	// 2. The application's files.
 	plan := scaffold.Plan{}
-	var migration []scaffold.File
 	if !*noFiles {
 		if app.Lang == "go" {
 			plan = scaffold.Go(app, req.System)
 		} else {
 			plan = scaffold.Node(app, req.System)
 		}
-		if migration, err = scaffold.Migration(env.Dir, env.Now()); err != nil {
-			return fail(env, err)
-		}
-		written, err := scaffold.Write(env.Dir, append(plan.Files, migration...), *force)
+		written, err := scaffold.Write(env.Dir, plan.Files, *force)
 		if err != nil {
 			return fail(env, err)
 		}
@@ -168,7 +164,7 @@ func runInit(args []string, env Env) int {
 		if err != nil {
 			return fail(env, err)
 		}
-		fmt.Fprintf(env.Out, "  %-9s PACT_ROOT_KEY= in %s\n", said, scaffold.ExampleFile)
+		fmt.Fprintf(env.Out, "  %-9s CAUTHY_KEY= in %s\n", said, scaffold.ExampleFile)
 	}
 
 	// 3. The graph.
@@ -189,7 +185,7 @@ func runInit(args []string, env Env) int {
 		}
 	}
 
-	nextSteps(env, req, app.Lang, plan, migration, *contracts != "", pulled)
+	nextSteps(env, req, app.Lang, plan, *contracts != "", pulled)
 	if pullFailed {
 		return ExitFail
 	}
@@ -288,7 +284,7 @@ func draftContracts(env Env, dir string, req link.Request) error {
 	return nil
 }
 
-func nextSteps(env Env, req link.Request, lang string, plan scaffold.Plan, migration []scaffold.File, drafted, pulled bool) {
+func nextSteps(env Env, req link.Request, lang string, plan scaffold.Plan, drafted, pulled bool) {
 	var steps []string
 	if drafted {
 		steps = append(steps, "In core-contracts: pnpm check, then a pull request. Merging is the approval; Cauthy applies the link on its next deploy.")
@@ -301,9 +297,6 @@ func nextSteps(env Env, req link.Request, lang string, plan scaffold.Plan, migra
 	}
 	if plan.Install != "" {
 		steps = append(steps, "Install: "+plan.Install)
-	}
-	if len(migration) > 0 {
-		steps = append(steps, "Run the migration "+migration[0].Path+" with the application's migration tool.")
 	}
 	steps = append(steps, plan.Steps...)
 	if pulled {

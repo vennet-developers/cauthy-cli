@@ -18,13 +18,19 @@ func TestGoWiring(t *testing.T) {
 	if _, err := parser.ParseFile(token.NewFileSet(), "cauthyauth.go", src, parser.AllErrors); err != nil {
 		t.Fatalf("the file is not Go: %v\n%s", err, src)
 	}
-	for _, want := range []string{`const System = "acme-crm"`, `os.ReadFile("contracts/graph.json")`, "keys.Postgres(db)", `cauthy "github.com/vennet-developers/cauthy-sdk-go"`} {
+	for _, want := range []string{`os.ReadFile("contracts/graph.json")`, `cauthy.New(cauthy.Options{Contract: &cauthy.Contract{Graph: graph, System: "acme-crm"}})`, `cauthy "github.com/vennet-developers/cauthy-sdk-go"`, "func New() (*cauthy.Auth, error)", "CAUTHY_KEY"} {
 		if !strings.Contains(src, want) {
-			t.Errorf("missing %q", want)
+			t.Errorf("missing %q in\n%s", want, src)
+		}
+	}
+	for _, not := range []string{"database/sql", "keys.", "Keys:", "PACT_ROOT_KEY", "sql.DB"} {
+		if strings.Contains(src, not) {
+			t.Errorf("%q in\n%s", not, src)
 		}
 	}
 	steps := strings.Join(p.Steps, "\n")
-	if !strings.Contains(steps, `import "github.com/acme/acme-crm/internal/cauthyauth"`) || !strings.Contains(steps, `r.Handle("/api/auth/*", auth)`) {
+	if !strings.Contains(steps, `import "github.com/acme/acme-crm/internal/cauthyauth"`) || !strings.Contains(steps, `r.Handle("/api/auth/*", auth)`) ||
+		!strings.Contains(steps, "auth, err := cauthyauth.New()\n") || strings.Contains(steps, "db") {
 		t.Fatalf("%s", steps)
 	}
 	if p.Install != "go get github.com/vennet-developers/cauthy-sdk-go@latest" {

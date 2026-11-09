@@ -44,34 +44,29 @@ func TestNextInContractMode(t *testing.T) {
 	}
 	f := files(p)
 	auth := f["src/lib/auth.ts"]
-	for _, want := range []string{
-		"import { createCauthy } from '@cauthyhq/node'",
-		"import { cauthyNext } from '@cauthyhq/node/next'",
-		"import { postgresKeyStore } from '@cauthyhq/node/keys'",
-		"import graph from '../../contracts/graph.json'",
-		"contract: { graph, system: 'acme-crm' }",
-		"keys: postgresKeyStore((text, params) => pool.query(text, params))",
-		"export const cauthy = cauthyNext(auth)",
-	} {
-		if !strings.Contains(auth, want) {
-			t.Errorf("auth file missing %q:\n%s", want, auth)
-		}
-	}
-	if strings.Contains(auth, "CAUTHY_") || strings.Contains(auth, "PACT_ROOT_KEY=") {
-		t.Fatalf("contract mode reads no CAUTHY_* variable and holds no value:\n%s", auth)
+	want := `import graph from '../../contracts/graph.json'
+import { createCauthy } from '@cauthyhq/node'
+import { cauthyNext } from '@cauthyhq/node/next'
+
+// Reads CAUTHY_KEY; the contract adds the system proof and its policies.
+export const auth = createCauthy({ contract: { graph, system: 'acme-crm' } })
+export const cauthy = cauthyNext(auth)
+`
+	if auth != want {
+		t.Fatalf("auth file:\n%s\nwant:\n%s", auth, want)
 	}
 	if !strings.Contains(f["src/app/.well-known/pact-jwks.json/route.ts"], "export const GET = () => auth.pact!.jwks()") {
 		t.Fatal(f["src/app/.well-known/pact-jwks.json/route.ts"])
 	}
-	if p.Install != "pnpm add @cauthyhq/node pg" {
+	if p.Install != "pnpm add @cauthyhq/node" {
 		t.Fatalf("install %q", p.Install)
 	}
-	old := Node(&detect.App{Lang: "node", Framework: "next", NextMajor: 15, NextMinor: 5, PackageManager: "npm", Deps: map[string]bool{"@cauthyhq/node": true, "pg": true}}, "acme-crm")
+	old := Node(&detect.App{Lang: "node", Framework: "next", NextMajor: 15, NextMinor: 5, PackageManager: "npm", Deps: map[string]bool{"@cauthyhq/node": true}}, "acme-crm")
 	if !strings.HasSuffix(paths(old), " middleware.js") || old.Install != "" {
 		t.Fatalf("%s %q", paths(old), old.Install)
 	}
 	// Before 16 the middleware runs on the Edge runtime unless it says
-	// otherwise, and pg does not run there.
+	// otherwise, and the SDK runs on Node.js.
 	if mw := files(old)["middleware.js"]; !strings.Contains(mw, "runtime: 'nodejs'") {
 		t.Fatalf("%s", mw)
 	}
@@ -106,18 +101,37 @@ func TestTanStackStart(t *testing.T) {
 		t.Fatalf("%s", paths(p))
 	}
 	f := files(p)
-	if !strings.Contains(f["src/routes/[.]well-known/pact-jwks[.]json.ts"], "import { auth } from '../../auth'") ||
-		!strings.Contains(f["src/auth.ts"], "import graph from '../contracts/graph.json'") {
+	if !strings.Contains(f["src/routes/[.]well-known/pact-jwks[.]json.ts"], "import { auth } from '../../auth'") {
 		t.Fatalf("%v", f)
+	}
+	want := `import graph from '../contracts/graph.json'
+import { createCauthy } from '@cauthyhq/node'
+
+// Reads CAUTHY_KEY; the contract adds the system proof and its policies.
+export const auth = createCauthy({ contract: { graph, system: 'acme-crm' } })
+`
+	if f["src/auth.ts"] != want {
+		t.Fatalf("auth file:\n%s\nwant:\n%s", f["src/auth.ts"], want)
 	}
 }
 
 func TestServersGetTheLinesToAdd(t *testing.T) {
 	cjs := Node(&detect.App{Lang: "node", Framework: "express", PackageManager: "npm", Deps: map[string]bool{"express": true}}, "acme-crm")
 	auth := files(cjs)["auth.js"]
-	if !strings.Contains(auth, "const { createCauthy } = require('@cauthyhq/node')") || !strings.Contains(auth, "exports.auth = createCauthy(") ||
-		!strings.Contains(auth, "JSON.parse(readFileSync('contracts/graph.json', 'utf8'))") {
-		t.Fatalf("%s", auth)
+	want := `const { readFileSync } = require('node:fs')
+const { createCauthy } = require('@cauthyhq/node')
+
+// Read from the working directory: start the server from the application's folder.
+const graph = JSON.parse(readFileSync('contracts/graph.json', 'utf8'))
+
+// Reads CAUTHY_KEY; the contract adds the system proof and its policies.
+exports.auth = createCauthy({ contract: { graph, system: 'acme-crm' } })
+`
+	if auth != want {
+		t.Fatalf("auth file:\n%s\nwant:\n%s", auth, want)
+	}
+	if esm := files(Node(&detect.App{Lang: "node", Framework: "hono", ESM: true, PackageManager: "npm", Deps: map[string]bool{}}, "acme-crm"))["auth.js"]; !strings.HasPrefix(esm, "import { readFileSync } from 'node:fs'\nimport { createCauthy } from '@cauthyhq/node'\n") {
+		t.Fatalf("%s", esm)
 	}
 	steps := strings.Join(cjs.Steps, "\n")
 	// The @cauthyhq/node 1.0 adapters serve the JWKS path themselves: no extra route.
@@ -135,5 +149,28 @@ func TestServersGetTheLinesToAdd(t *testing.T) {
 	unknown := Node(&detect.App{Lang: "node", PackageManager: "npm", Deps: map[string]bool{}}, "acme-crm")
 	if paths(unknown) != "auth.js" || !strings.Contains(unknown.Steps[0], "Mount the route") {
 		t.Fatalf("%s %s", paths(unknown), unknown.Steps)
+	}
+}
+
+// On CAUTHY_KEY the wiring has no key store: no pg, no DATABASE_URL, no
+// PACT_ROOT_KEY.
+func TestNodeWiringHasNoKeyStore(t *testing.T) {
+	for _, a := range []*detect.App{
+		{Lang: "node", Framework: "next", TypeScript: true, NextMajor: 16, PackageManager: "npm", Deps: map[string]bool{}},
+		{Lang: "node", Framework: "tanstack-start", TypeScript: true, PackageManager: "npm", Deps: map[string]bool{}},
+		{Lang: "node", Framework: "express", PackageManager: "npm", Deps: map[string]bool{}},
+		{Lang: "node", PackageManager: "npm", Deps: map[string]bool{}},
+	} {
+		p := Node(a, "acme-crm")
+		for path, content := range files(p) {
+			for _, not := range []string{"pg", "postgresKeyStore", "DATABASE_URL", "PACT_ROOT_KEY", "keys:"} {
+				if strings.Contains(content, not) {
+					t.Errorf("%s %s: %q in\n%s", a.Framework, path, not, content)
+				}
+			}
+		}
+		if p.Install != "npm install @cauthyhq/node" {
+			t.Errorf("%s: install %q", a.Framework, p.Install)
+		}
 	}
 }

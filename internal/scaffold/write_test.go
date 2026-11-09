@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestWriteNeverOverwritesWithoutForce(t *testing.T) {
@@ -44,10 +43,11 @@ func TestEnvExampleAddsTheNameNeverAValue(t *testing.T) {
 		t.Fatalf("second run: %q", said)
 	}
 	raw, _ := os.ReadFile(path)
-	if !strings.HasPrefix(string(raw), "DATABASE_URL=\n# ") || strings.Count(string(raw), "PACT_ROOT_KEY=") != 1 || !strings.HasSuffix(string(raw), "PACT_ROOT_KEY=\n") {
-		t.Fatalf("%q", raw)
+	want := "DATABASE_URL=\n" + keyLines
+	if string(raw) != want {
+		t.Fatalf("%q\nwant %q", raw, want)
 	}
-	if err := os.WriteFile(path, []byte("PACT_ROOT_KEY=abc\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("CAUTHY_KEY=cauthy1.abc\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if said, _ := EnvExample(dir); !strings.HasPrefix(said, "has a value") {
@@ -55,57 +55,25 @@ func TestEnvExampleAddsTheNameNeverAValue(t *testing.T) {
 	}
 }
 
-func TestMigrationFollowsTheFolder(t *testing.T) {
-	now := time.Date(2026, 11, 7, 12, 30, 0, 0, time.UTC)
-	mk := func(files ...string) string {
-		dir := t.TempDir()
-		for _, f := range files {
-			p := filepath.Join(dir, filepath.FromSlash(f))
-			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(p, []byte("CREATE TABLE things (id int);\n"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-		}
-		return dir
-	}
-	paths := func(fs []File) string {
-		var out []string
-		for _, f := range fs {
-			out = append(out, f.Path)
-		}
-		return strings.Join(out, " ")
-	}
-	cases := map[string]struct {
-		dir  string
-		want string
-	}{
-		"no folder":       {mk(), "migrations/20261107123000_cauthy_pact_keys.sql"},
-		"numbered pairs":  {mk("db/migrations/000011_things.up.sql", "db/migrations/000011_things.down.sql"), "db/migrations/000012_cauthy_pact_keys.up.sql db/migrations/000012_cauthy_pact_keys.down.sql"},
-		"timestamped":     {mk("migrations/20260101000000_things.sql"), "migrations/20261107123000_cauthy_pact_keys.sql"},
-		"numbered single": {mk("sql/migrations/7_things.sql"), "sql/migrations/8_cauthy_pact_keys.sql"},
-	}
-	for name, tc := range cases {
-		fs, err := Migration(tc.dir, now)
-		if err != nil || paths(fs) != tc.want {
-			t.Errorf("%s: %v %q, want %q", name, err, paths(fs), tc.want)
-		}
-	}
-	fs, _ := Migration(mk(), now)
-	if !strings.Contains(fs[0].Content, "CREATE TABLE IF NOT EXISTS cauthy_pact_keys") || !strings.Contains(fs[0].Content, "public_jwk JSONB") {
-		t.Fatalf("%s", fs[0].Content)
-	}
-	// A migration that already names the table: nothing to add.
-	done := mk()
-	if err := os.MkdirAll(filepath.Join(done, "migrations"), 0o755); err != nil {
+const keyLines = "# The application's only setting: the key Cauthy's dashboard made for it (Integrate → Applications). Set it in the secret manager, never here.\nCAUTHY_KEY=\n"
+
+// A file from contract mode before CAUTHY_KEY: PACT_ROOT_KEY is said to be
+// deprecated, once.
+func TestEnvExampleDeprecatesTheRootKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ExampleFile)
+	if err := os.WriteFile(path, []byte("# The only secret of contract mode.\nPACT_ROOT_KEY=\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(done, "migrations", "001_keys.sql"), []byte("CREATE TABLE cauthy_pact_keys ();"), 0o644); err != nil {
-		t.Fatal(err)
+	for range 2 {
+		if _, err := EnvExample(dir); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if fs, err := Migration(done, now); err != nil || len(fs) != 0 {
-		t.Fatalf("%v %+v", err, fs)
+	raw, _ := os.ReadFile(path)
+	want := "# The only secret of contract mode.\n# PACT_ROOT_KEY: deprecated, replaced by CAUTHY_KEY (remove after moving).\nPACT_ROOT_KEY=\n" + keyLines
+	if string(raw) != want {
+		t.Fatalf("%q\nwant %q", raw, want)
 	}
 }
 

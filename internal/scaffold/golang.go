@@ -7,8 +7,8 @@ import (
 )
 
 // GoModule is the SDK the Go file imports. The names it uses (cauthy.New,
-// Options, Contract, keys.Postgres, *cauthy.Auth as an http.Handler,
-// JWKSPath, the adapters' Mount) are what stage 4's cauthy-sdk-go must export.
+// Options, Contract, *cauthy.Auth as an http.Handler, JWKSPath, the
+// adapters' Mount) are what cauthy-sdk-go 1.2 exports.
 const GoModule = "github.com/vennet-developers/cauthy-sdk-go"
 
 // GoFile is where the wiring goes in a Go application.
@@ -19,7 +19,7 @@ func Go(a *detect.App, system string) Plan {
 	p := Plan{Files: []File{{GoFile, goAuth(system)}}}
 	install := "go get " + GoModule + "@latest"
 	importLine := fmt.Sprintf("  import \"%s/%s\"\n", a.Module, "internal/cauthyauth")
-	open := "  auth, err := cauthyauth.New(db) // db is the application's *sql.DB (pgx's stdlib driver or lib/pq)\n  if err != nil {\n    log.Fatal(err) // the contract or the environment is wrong: never start without sign-in\n  }\n"
+	open := "  auth, err := cauthyauth.New()\n  if err != nil {\n    log.Fatal(err) // the contract or the environment is wrong: never start without sign-in\n  }\n"
 	var mount string
 	switch a.Framework {
 	case "chi":
@@ -40,35 +40,27 @@ func Go(a *detect.App, system string) Plan {
 }
 
 func goAuth(system string) string {
-	return fmt.Sprintf(`// Package cauthyauth signs people in with Cauthy by contract: Cauthy's
-// address, the tenant and the clients come from contracts/graph.json (cauthy
-// contracts pull); the only secret is PACT_ROOT_KEY, and the application's own
-// key lives sealed in the cauthy_pact_keys table. Written by cauthy init.
+	return fmt.Sprintf(`// Package cauthyauth signs people in with Cauthy by contract. The
+// application's only setting is CAUTHY_KEY; Cauthy's address, the workspace
+// and the clients come from contracts/graph.json (cauthy contracts pull), and
+// the contract adds the system proof and its policies. Written by cauthy init.
 package cauthyauth
 
 import (
-	"database/sql"
 	"os"
 
 	cauthy "%[1]s"
-	"%[1]s/keys"
 )
 
-// System is this application's id in the Pact graph.
-const System = %[2]q
-
 // New reads contracts/graph.json from the working directory (start the
-// server from the application's folder) and PACT_ROOT_KEY from the
+// server from the application's folder) and CAUTHY_KEY from the
 // environment. It refuses to start on anything contract/pact.md lists.
-func New(db *sql.DB) (*cauthy.Auth, error) {
+func New() (*cauthy.Auth, error) {
 	graph, err := os.ReadFile("contracts/graph.json")
 	if err != nil {
 		return nil, err
 	}
-	return cauthy.New(cauthy.Options{
-		Contract: &cauthy.Contract{Graph: graph, System: System},
-		Keys:     keys.Postgres(db),
-	})
+	return cauthy.New(cauthy.Options{Contract: &cauthy.Contract{Graph: graph, System: %[2]q}})
 }
 `, GoModule, system)
 }

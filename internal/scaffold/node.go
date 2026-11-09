@@ -44,11 +44,11 @@ func join(parts ...string) string {
 }
 
 // Supported refuses what init cannot wire: Next.js before 15.5, whose
-// middleware cannot run on Node.js (pg, and the sealed key, need it). A Next
-// version init cannot read is taken as the current one.
+// middleware cannot run on Node.js (the SDK needs it). A Next version init
+// cannot read is taken as the current one.
 func Supported(a *detect.App) error {
 	if a.Framework == "next" && a.NextMajor > 0 && (a.NextMajor < 15 || a.NextMajor == 15 && a.NextMinor < 5) {
-		return fmt.Errorf("Next.js 15.5 or newer is required (found %d.%d): before it the middleware runs only on the Edge runtime, where the key store cannot. Upgrade Next.js, then run cauthy init again", a.NextMajor, a.NextMinor)
+		return fmt.Errorf("Next.js 15.5 or newer is required (found %d.%d): before it the middleware runs only on the Edge runtime, where @cauthyhq/node cannot. Upgrade Next.js, then run cauthy init again", a.NextMajor, a.NextMinor)
 	}
 	return nil
 }
@@ -66,7 +66,7 @@ func Node(a *detect.App, system string) Plan {
 	cjs := !a.TypeScript && !a.ESM && a.Framework != "next" && a.Framework != "tanstack-start"
 	var p Plan
 	var missing []string
-	for _, dep := range []string{NodePackage, "pg"} {
+	for _, dep := range []string{NodePackage} {
 		if !a.Deps[dep] {
 			missing = append(missing, dep)
 		}
@@ -92,7 +92,7 @@ func Node(a *detect.App, system string) Plan {
 		jwks := join(a.Root, "app/.well-known/pact-jwks.json", "route."+ext)
 		p.Files = append(p.Files, File{jwks, fmt.Sprintf("// Publishes the public half of the application's key at the jwks_url of its\n// manifest. Written by cauthy init.\nimport { auth } from '%s'\n\nexport const GET = () => auth.pact%s.jwks()\n", importPath(jwks, authFile), bang)})
 		// Next 16's proxy runs on Node.js; 15.5's middleware must say so, or
-		// it runs on the Edge runtime, where pg cannot.
+		// it runs on the Edge runtime, where the SDK cannot.
 		name, runtime := "proxy", ""
 		if a.NextMajor > 0 && a.NextMajor < 16 {
 			name, runtime = "middleware", "runtime: 'nodejs', "
@@ -125,35 +125,28 @@ func Node(a *detect.App, system string) Plan {
 	return p
 }
 
-// nodeAuth is the file that makes the SDK in contract mode. graphLine either
-// imports the graph (bundled frameworks) or imports readFileSync (servers).
+// nodeAuth is the file that makes the SDK in contract mode, on CAUTHY_KEY:
+// no key store, no database. graphLine either imports the graph (bundled
+// frameworks) or imports readFileSync (servers).
 func nodeAuth(system, graphLine string, next, cjs bool) string {
 	var b strings.Builder
-	b.WriteString(`// Sign-in with Cauthy by contract: Cauthy's address, the tenant and the
-// clients come from contracts/graph.json (cauthy contracts pull); the only
-// secret is PACT_ROOT_KEY, and the application's own key lives sealed in the
-// cauthy_pact_keys table. Written by cauthy init.
-`)
+	b.WriteString(graphLine)
 	if cjs {
-		b.WriteString("const { createCauthy } = require('" + NodePackage + "')\nconst { postgresKeyStore } = require('" + NodePackage + "/keys')\nconst pg = require('pg')\n")
-		b.WriteString(graphLine)
+		b.WriteString("const { createCauthy } = require('" + NodePackage + "')\n")
 	} else {
 		b.WriteString("import { createCauthy } from '" + NodePackage + "'\n")
 		if next {
 			b.WriteString("import { cauthyNext } from '" + NodePackage + "/next'\n")
 		}
-		b.WriteString("import { postgresKeyStore } from '" + NodePackage + "/keys'\nimport pg from 'pg'\n")
-		b.WriteString(graphLine)
 	}
 	if strings.Contains(graphLine, "readFileSync") {
 		b.WriteString("\n// Read from the working directory: start the server from the application's folder.\nconst graph = JSON.parse(readFileSync('contracts/graph.json', 'utf8'))\n")
 	}
-	b.WriteString("const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })\n\n")
 	exp := "export const auth = "
 	if cjs {
 		exp = "exports.auth = "
 	}
-	fmt.Fprintf(&b, "%screateCauthy({\n  contract: { graph, system: '%s' },\n  keys: postgresKeyStore((text, params) => pool.query(text, params)),\n})\n", exp, system)
+	fmt.Fprintf(&b, "\n// Reads CAUTHY_KEY; the contract adds the system proof and its policies.\n%screateCauthy({ contract: { graph, system: '%s' } })\n", exp, system)
 	if next {
 		b.WriteString("export const cauthy = cauthyNext(auth)\n")
 	}

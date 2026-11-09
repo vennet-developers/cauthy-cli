@@ -1,6 +1,6 @@
 // Package scaffold writes into the application what contract mode needs: the
-// auth wiring for its framework, the key table's migration and the
-// .env.example line. It never writes over a file without force.
+// auth wiring for its framework and the .env.example line. It never writes
+// over a file without force.
 package scaffold
 
 import (
@@ -93,8 +93,16 @@ func CreateNew(path string, data []byte) error {
 // ExampleFile is the committed file that lists the variables an application reads.
 const ExampleFile = ".env.example"
 
-// EnvExample adds the line PACT_ROOT_KEY= to ExampleFile, never a value. It
-// answers what it did: added, present, or a warning when the file carries a value.
+// keyComment and keyLine are what EnvExample adds.
+const (
+	keyComment        = "# The application's only setting: the key Cauthy's dashboard made for it (Integrate → Applications). Set it in the secret manager, never here."
+	keyLine           = "CAUTHY_KEY="
+	rootKeyDeprecated = "# PACT_ROOT_KEY: deprecated, replaced by CAUTHY_KEY (remove after moving)."
+)
+
+// EnvExample adds the line CAUTHY_KEY= to ExampleFile, never a value, and
+// marks a PACT_ROOT_KEY= line there deprecated. It answers what it did:
+// added, present, or a warning when the file carries a key.
 func EnvExample(dir string) (string, error) {
 	path := filepath.Join(dir, ExampleFile)
 	if st, err := os.Lstat(path); err == nil && st.Mode()&os.ModeSymlink != 0 {
@@ -105,28 +113,44 @@ func EnvExample(dir string) (string, error) {
 		return "", err
 	}
 	missing := err != nil
-	for _, line := range strings.Split(string(had), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "PACT_ROOT_KEY=" {
-			return "present", nil
-		}
-		if strings.HasPrefix(line, "PACT_ROOT_KEY=") {
-			return "has a value: a root key never goes in a committed file; remove it there and rotate it (cauthy keys reseal --help)", nil
-		}
-	}
 	text := string(had)
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	text += "# The only secret of contract mode: 32 random bytes (cauthy keys new-root). Set it in the secret manager, never here.\nPACT_ROOT_KEY=\n"
+	var lines []string
+	present, changed := false, false
+	for i, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == keyLine:
+			present = true
+		case strings.HasPrefix(trimmed, keyLine):
+			return "has a value: a CAUTHY_KEY never goes in a committed file; remove it there and make a new key on the application's card", nil
+		case strings.HasPrefix(trimmed, "PACT_ROOT_KEY=") && (i == 0 || strings.TrimSpace(lines[len(lines)-1]) != rootKeyDeprecated):
+			lines = append(lines, rootKeyDeprecated)
+			changed = true
+		}
+		if text != "" {
+			lines = append(lines, line)
+		}
+	}
+	said := "present"
+	if !present {
+		lines = append(lines, keyComment, keyLine)
+		said, changed = "added", true
+	}
+	if !changed {
+		return said, nil
+	}
+	out := []byte(strings.Join(lines, "\n") + "\n")
 	if missing {
-		if err := CreateNew(path, []byte(text)); err != nil {
+		if err := CreateNew(path, out); err != nil {
 			return "", err
 		}
-		return "added", nil
+		return said, nil
 	}
-	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+	if err := os.WriteFile(path, out, 0o644); err != nil {
 		return "", err
 	}
-	return "added", nil
+	return said, nil
 }

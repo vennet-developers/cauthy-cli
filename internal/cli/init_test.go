@@ -53,10 +53,9 @@ func TestInitAsTheOwner(t *testing.T) {
 		"1. Send the request above to support@vennet.dev and wait",
 		"  wrote     lib/auth.ts",
 		"  wrote     app/.well-known/pact-jwks.json/route.ts",
-		"  wrote     migrations/20261107120000_cauthy_pact_keys.sql",
-		"  added     PACT_ROOT_KEY= in " + scaffold.ExampleFile,
+		"  added     CAUTHY_KEY= in " + scaffold.ExampleFile,
 		"graph unversioned → contracts (2 systems, 1 links); every copy identical",
-		"Install: npm install @cauthyhq/node pg",
+		"Install: npm install @cauthyhq/node\n",
 		"cauthy pact check --system acme-crm --live https://crm.example.com",
 	} {
 		if !strings.Contains(text, want) {
@@ -66,21 +65,22 @@ func TestInitAsTheOwner(t *testing.T) {
 	if strings.Contains(errOut.String(), "differs from what Cauthy says") {
 		t.Errorf("stderr: %s", errOut)
 	}
+	// No key store: no migration, and nothing said about one.
+	if _, err := os.Stat(filepath.Join(env.Dir, "migrations")); err == nil || strings.Contains(text, "migration") {
+		t.Errorf("a migration:\n%s", text)
+	}
 
 	// Again: nothing changes, nothing is added twice.
 	out.Reset()
 	if code := Run(args, env); code != ExitOK {
 		t.Fatalf("second run: exit %d\n%s", code, errOut)
 	}
-	if strings.Contains(out.String(), "  wrote ") || !strings.Contains(out.String(), "  unchanged lib/auth.ts") || !strings.Contains(out.String(), "  present   PACT_ROOT_KEY=") {
+	if strings.Contains(out.String(), "  wrote ") || !strings.Contains(out.String(), "  unchanged lib/auth.ts") || !strings.Contains(out.String(), "  present   CAUTHY_KEY=") {
 		t.Fatalf("second run:\n%s", out)
 	}
 	example, _ := os.ReadFile(filepath.Join(env.Dir, scaffold.ExampleFile))
-	if strings.Count(string(example), "PACT_ROOT_KEY=") != 1 {
+	if strings.Count(string(example), "CAUTHY_KEY=") != 1 || strings.Contains(string(example), "PACT_ROOT_KEY") {
 		t.Fatalf("%q", example)
-	}
-	if migrations, _ := os.ReadDir(filepath.Join(env.Dir, "migrations")); len(migrations) != 1 {
-		t.Fatalf("%d migrations", len(migrations))
 	}
 
 	// A file the person changed is kept.
