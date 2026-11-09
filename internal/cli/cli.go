@@ -80,6 +80,7 @@ const help = `cauthy connects an application to Cauthy.
   cauthy contracts pull       vendor the Pact graph into one or more folders
   cauthy contracts check      say whether vendored copies are identical
   cauthy pact check           what the contract says, and whether the app would start
+  cauthy key inspect          what the application's CAUTHY_KEY names (--check asks Cauthy)
   cauthy keys new-root        make a PACT_ROOT_KEY
   cauthy keys rotate|reseal   how to rotate the application's key (from the app)
   cauthy conformance          certify a backend against the auth-bff protocol
