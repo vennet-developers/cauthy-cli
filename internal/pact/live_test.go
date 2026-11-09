@@ -88,6 +88,10 @@ func TestLiveWellDeployed(t *testing.T) {
 
 func TestLiveFindsWhatIsWrong(t *testing.T) {
 	good := publicJWK(t, 2048)
+	ed := map[string]string{"kty": "OKP", "crv": "Ed25519", "alg": "EdDSA", "use": "sig", "kid": "MPm2QSpxM8h0f62jkHSMrLjYR3ojMI0oOKF4AA7Sw2U",
+		"x": base64.RawURLEncoding.EncodeToString(make([]byte, 32))}
+	shortX := map[string]string{"kty": "OKP", "crv": "Ed25519", "alg": "EdDSA", "kid": "k", "x": "AAAA"}
+	ecKey := map[string]string{"kty": "EC", "crv": "P-256", "alg": "ES256", "kid": "k"}
 	private := map[string]string{"d": "AQAB"}
 	for k, v := range good {
 		private[k] = v
@@ -104,6 +108,11 @@ func TestLiveFindsWhatIsWrong(t *testing.T) {
 		"weak key":              {app{keys: []map[string]string{publicJWK(t, 1024)}, protocol: "1"}, "basic", "live.jwks", Fail, "not a 2048-bit"},
 		"rotation window":       {app{keys: []map[string]string{good, good}, protocol: "1"}, "basic", "live.jwks", Pass, "24-hour window"},
 		"three keys":            {app{keys: []map[string]string{good, good, good}, protocol: "1"}, "basic", "live.jwks", Fail, "two at most"},
+		"moving to CAUTHY_KEY":  {app{keys: []map[string]string{ed, good}, protocol: "1"}, "basic", "live.jwks", Pass, "RS256 key(s) of PACT_ROOT_KEY"},
+		"on CAUTHY_KEY only":    {app{keys: []map[string]string{ed}, protocol: "1"}, "basic", "live.jwks", Pass, "Ed25519 MPm2QSpx"},
+		"short Ed25519 x":       {app{keys: []map[string]string{shortX}, protocol: "1"}, "basic", "live.jwks", Fail, "32-byte x"},
+		"three Ed25519 keys":    {app{keys: []map[string]string{ed, ed, ed}, protocol: "1"}, "basic", "live.jwks", Fail, "CAUTHY_KEY_PREVIOUS"},
+		"other key type":        {app{keys: []map[string]string{ecKey}, protocol: "1"}, "basic", "live.jwks", Fail, `found kty "EC"`},
 		"0.x backend, basic":    {app{keys: []map[string]string{good}}, "basic", "live.session", Advisory, "cauthy-auth 0.x"},
 		"0.x backend, strict":   {app{keys: []map[string]string{good}}, "strict", "live.session", Fail, "level strict"},
 		"other protocol":        {app{keys: []map[string]string{good}, protocol: "2"}, "basic", "live.session", Fail, "speaks protocol 2"},

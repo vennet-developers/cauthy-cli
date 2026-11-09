@@ -25,6 +25,7 @@ type jwk struct {
 	Kid string `json:"kid"`
 	N   string `json:"n"`
 	E   string `json:"e"`
+	X   string `json:"x"`
 	// Private members: never published.
 	D  string `json:"d"`
 	P  string `json:"p"`
@@ -111,24 +112,47 @@ func liveJWKS(r *Report, client *http.Client, c *graph.Contract, kid string) {
 		r.Add(id, Fail, "%s publishes no key", shown)
 		return
 	}
+	// Without the key's kid, any CAUTHY_KEY's Ed25519 half passes beside the
+	// RS256 keys of PACT_ROOT_KEY's store (both stand there while moving).
+	var rsa, ed []string
 	for _, k := range set.Keys {
-		if k.Kty != "RSA" || k.Alg != "RS256" || k.Kid == "" {
-			r.Add(id, Fail, "%s: every key is RSA with alg RS256 and a kid; found kty %q alg %q kid %q", shown, k.Kty, k.Alg, k.Kid)
-			return
-		}
-		n, err := base64.RawURLEncoding.DecodeString(k.N)
-		if err != nil || new(big.Int).SetBytes(n).BitLen() < 2048 {
-			r.Add(id, Fail, "%s: key %s is not a 2048-bit RSA key", shown, k.Kid)
+		switch {
+		case k.Kty == "OKP":
+			x, err := base64.RawURLEncoding.DecodeString(k.X)
+			if k.Crv != "Ed25519" || (k.Alg != "" && k.Alg != "EdDSA") || k.Kid == "" || err != nil || len(x) != 32 {
+				r.Add(id, Fail, "%s: an OKP key is Ed25519 with alg EdDSA, a kid and a 32-byte x; found crv %q alg %q kid %q", shown, k.Crv, k.Alg, k.Kid)
+				return
+			}
+			ed = append(ed, k.Kid)
+		case k.Kty == "RSA" && k.Alg == "RS256" && k.Kid != "":
+			n, err := base64.RawURLEncoding.DecodeString(k.N)
+			if err != nil || new(big.Int).SetBytes(n).BitLen() < 2048 {
+				r.Add(id, Fail, "%s: key %s is not a 2048-bit RSA key", shown, k.Kid)
+				return
+			}
+			rsa = append(rsa, k.Kid)
+		default:
+			r.Add(id, Fail, "%s: every key is Ed25519 (EdDSA) or RSA with alg RS256, with a kid; found kty %q alg %q kid %q", shown, k.Kty, k.Alg, k.Kid)
 			return
 		}
 	}
-	switch len(set.Keys) {
-	case 1:
+	if len(rsa) > 2 {
+		r.Add(id, Fail, "%d RS256 keys published at %s: a rotation keeps two at most; remove the old ones", len(rsa), shown)
+		return
+	}
+	if len(ed) > 2 {
+		r.Add(id, Fail, "%d Ed25519 keys published at %s: CAUTHY_KEY and CAUTHY_KEY_PREVIOUS make two at most", len(ed), shown)
+		return
+	}
+	switch {
+	case len(ed) > 0 && len(rsa) > 0:
+		r.Add(id, Pass, "Ed25519 %s and %d RS256 key(s) of PACT_ROOT_KEY published at %s: remove PACT_ROOT_KEY after the window; set CAUTHY_KEY here to check the key is this application's", strings.Join(ed, ", "), len(rsa), shown)
+	case len(ed) > 0:
+		r.Add(id, Pass, "Ed25519 %s published at %s: set CAUTHY_KEY here to check the key is this application's", strings.Join(ed, ", "), shown)
+	case len(rsa) == 1:
 		r.Add(id, Pass, "one RS256 key published at %s", shown)
-	case 2:
-		r.Add(id, Pass, "two RS256 keys published at %s (a rotation is in its 24-hour window)", shown)
 	default:
-		r.Add(id, Fail, "%d keys published at %s: a rotation keeps two at most; remove the old ones", len(set.Keys), shown)
+		r.Add(id, Pass, "two RS256 keys published at %s (a rotation is in its 24-hour window)", shown)
 	}
 }
 
