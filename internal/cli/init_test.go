@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/vennet-developers/cauthy-cli/internal/scaffold"
+	"github.com/vennet-developers/cauthy-sdk-spec/conformance/cauthykey"
 )
 
 // nextApp writes a Next.js application into env.Dir.
@@ -25,11 +26,22 @@ func nextApp(t *testing.T, env Env) {
 	}
 }
 
+// nextSection is what init prints from "Next:" on.
+func nextSection(t *testing.T, out string) string {
+	t.Helper()
+	i := strings.Index(out, "\nNext:\n")
+	if i < 0 {
+		t.Fatalf("no next steps in\n%s", out)
+	}
+	return out[i:]
+}
+
 func TestInitAsTheOwner(t *testing.T) {
 	src := contractsFolder(t)
-	env, out, errOut := testEnv(t, map[string]string{"CONTRACTS_DIR": src})
+	key := startCauthy(t, acmeCRM)
+	env, out, errOut := testEnv(t, map[string]string{"CONTRACTS_DIR": src, "CAUTHY_KEY": key})
 	nextApp(t, env)
-	args := []string{"init", "--app-url", "https://crm.example.com", "--app-url", "http://localhost:3000"}
+	args := []string{"init"}
 	if code := Run(args, env); code != ExitOK {
 		t.Fatalf("exit %d\n%s%s", code, out, errOut)
 	}
@@ -45,12 +57,14 @@ func TestInitAsTheOwner(t *testing.T) {
 		"  added     PACT_ROOT_KEY= in " + scaffold.ExampleFile,
 		"graph unversioned → contracts (2 systems, 1 links); every copy identical",
 		"Install: npm install @cauthyhq/node pg",
-		"cauthy keys new-root --out ~/.config/cauthy/pact-root.key",
 		"cauthy pact check --system acme-crm --live https://crm.example.com",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in\n%s", want, text)
 		}
+	}
+	if strings.Contains(errOut.String(), "differs from what Cauthy says") {
+		t.Errorf("stderr: %s", errOut)
 	}
 
 	// Again: nothing changes, nothing is added twice.
@@ -80,14 +94,169 @@ func TestInitAsTheOwner(t *testing.T) {
 	}
 }
 
-func TestInitAsVennet(t *testing.T) {
+// Without a CAUTHY_KEY there is no application to add a contract to.
+func TestInitNeedsTheKey(t *testing.T) {
 	env, out, errOut := testEnv(t, nil)
+	nextApp(t, env)
+	if code := Run([]string{"init", "--app-url", "https://crm.example.com"}, env); code != ExitUsage {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	if !strings.Contains(errOut.String(), "No CAUTHY_KEY: connect the application in Cauthy's dashboard (Integrate → Applications) and put the line in .env") {
+		t.Fatalf("stderr: %s", errOut)
+	}
+	if entries, _ := os.ReadDir(env.Dir); len(entries) != 3 {
+		t.Fatalf("init wrote %d files without a key", len(entries)-3)
+	}
+}
+
+// What Cauthy says the application is fills the link: no --system, --tenant
+// or --app-url.
+func TestInitFromWhatCauthySays(t *testing.T) {
+	key := startCauthy(t, acmeCRM)
+	env, out, errOut := testEnv(t, map[string]string{"CAUTHY_KEY": key})
 	nextApp(t, env)
 	cc := filepath.Join(t.TempDir(), "core-contracts")
 	if err := os.MkdirAll(cc, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"init", "--app-url", "https://crm.example.com", "--contracts", cc, "--no-pull", "--no-files"}
+	if code := Run([]string{"init", "--contracts", cc, "--no-pull", "--no-files"}, env); code != ExitOK {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	linkYAML, err := os.ReadFile(filepath.Join(cc, "links", "acme-crm-signs-in-with-cauthy.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"  tenant: acme\n",
+		"\nservice: {}\n",
+		"  require_system_proof: auto\n",
+		"  require_verified_email: true\n",
+		"    - http://localhost:3000/api/auth/callback\n    - https://crm.example.com/api/auth/callback\n",
+	} {
+		if !strings.Contains(string(linkYAML), want) {
+			t.Errorf("link: missing %q in\n%s", want, linkYAML)
+		}
+	}
+	manifest, err := os.ReadFile(filepath.Join(cc, "systems", "acme-crm.yaml"))
+	if err != nil || !strings.Contains(string(manifest), "jwks_url: https://crm.example.com/.well-known/pact-jwks.json\n") {
+		t.Fatalf("manifest: %v\n%s", err, manifest)
+	}
+	if errOut.Len() > 0 {
+		t.Errorf("stderr: %s", errOut)
+	}
+}
+
+// A flag still wins over what Cauthy says, with a warning.
+func TestInitFlagsOverrideWhatCauthySays(t *testing.T) {
+	key := startCauthy(t, acmeCRM)
+	env, out, errOut := testEnv(t, map[string]string{"CAUTHY_KEY": key})
+	nextApp(t, env)
+	cc := filepath.Join(t.TempDir(), "core-contracts")
+	if err := os.MkdirAll(cc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"init", "--system", "other", "--contracts", cc, "--no-pull", "--no-files"}, env); code != ExitOK {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	if _, err := os.Stat(filepath.Join(cc, "links", "other-signs-in-with-cauthy.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(errOut.String(), "--system other differs from what Cauthy says (acme-crm)") {
+		t.Fatalf("stderr: %s", errOut)
+	}
+}
+
+// A contract needs the address where the application publishes its key.
+func TestInitNeedsAnHTTPSAddress(t *testing.T) {
+	key := startCauthy(t, whoCauthySays{System: "acme-crm", Tenant: "acme", AppURLs: []string{"http://localhost:3000"}})
+	env, out, errOut := testEnv(t, map[string]string{"CAUTHY_KEY": key})
+	nextApp(t, env)
+	if code := Run([]string{"init", "--no-pull"}, env); code != ExitFail {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	if !strings.Contains(errOut.String(), "add the production address on the application's card first: a contract needs the address where the application publishes its key") {
+		t.Fatalf("stderr: %s", errOut)
+	}
+	if entries, _ := os.ReadDir(env.Dir); len(entries) != 3 {
+		t.Fatalf("init wrote %d files before refusing", len(entries)-3)
+	}
+}
+
+// The connection request says the application is already connected, and
+// never carries the key.
+func TestInitConnectionRequest(t *testing.T) {
+	key := startCauthy(t, acmeCRM)
+	k, _ := cauthykey.Parse(key)
+	env, out, errOut := testEnv(t, map[string]string{"CAUTHY_KEY": key})
+	nextApp(t, env)
+	if code := Run([]string{"init", "--no-pull", "--no-files"}, env); code != ExitOK {
+		t.Fatalf("exit %d\n%s%s", code, out, errOut)
+	}
+	text := out.String()
+	for _, want := range []string{
+		"slug acme-crm",
+		"production https://crm.example.com; development http://localhost:3000",
+		"Node, Next.js",
+		"Workspace: acme",
+		"already connected with CAUTHY_KEY (client " + testKeyClient + ", key id " + testKeyKID + ")",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in\n%s", want, text)
+		}
+	}
+	if strings.Contains(text+errOut.String(), key) || strings.Contains(text+errOut.String(), k.Secret) {
+		t.Fatal("the key was printed")
+	}
+}
+
+// The next steps: merge, pull, pass the contract, deploy with the same key.
+func TestInitNextSteps(t *testing.T) {
+	for _, tc := range []struct {
+		name, mod, wiring string
+	}{
+		{"node", "", "createCauthy({ contract: { graph, system: 'acme-crm' } })"},
+		{"go", "module github.com/acme/acme-crm\n\ngo 1.27\n\nrequire github.com/go-chi/chi/v5 v5.2.0\n", `cauthy.Options{Contract: &cauthy.Contract{Graph: graph, System: "acme-crm"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			key := startCauthy(t, acmeCRM)
+			env, out, errOut := testEnv(t, map[string]string{"CAUTHY_KEY": key})
+			if tc.mod != "" {
+				writeFile(t, env.Dir, "go.mod", tc.mod)
+			} else {
+				nextApp(t, env)
+			}
+			if code := Run([]string{"init", "--no-pull"}, env); code != ExitOK {
+				t.Fatalf("exit %d\n%s%s", code, out, errOut)
+			}
+			next := nextSection(t, out.String())
+			for _, want := range []string{
+				"Send the request above",
+				"npx @cauthyhq/cli contracts pull",
+				tc.wiring,
+				"deploy with the same CAUTHY_KEY",
+			} {
+				if !strings.Contains(next, want) {
+					t.Errorf("missing %q in\n%s", want, next)
+				}
+			}
+			for _, not := range []string{"PACT_ROOT_KEY", "keys new-root"} {
+				if strings.Contains(next, not) {
+					t.Errorf("%q in\n%s", not, next)
+				}
+			}
+		})
+	}
+}
+
+func TestInitAsVennet(t *testing.T) {
+	key := startCauthy(t, acmeCRM)
+	env, out, errOut := testEnv(t, map[string]string{"CAUTHY_KEY": key})
+	nextApp(t, env)
+	cc := filepath.Join(t.TempDir(), "core-contracts")
+	if err := os.MkdirAll(cc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"init", "--contracts", cc, "--no-pull", "--no-files"}
 	if code := Run(args, env); code != ExitOK {
 		t.Fatalf("exit %d\n%s%s", code, out, errOut)
 	}
@@ -112,11 +281,12 @@ func TestInitAsVennet(t *testing.T) {
 }
 
 func TestInitGo(t *testing.T) {
-	env, out, errOut := testEnv(t, nil)
+	key := startCauthy(t, acmeCRM)
+	env, out, errOut := testEnv(t, map[string]string{"CAUTHY_KEY": key})
 	if err := os.WriteFile(filepath.Join(env.Dir, "go.mod"), []byte("module github.com/acme/acme-crm\n\ngo 1.27\n\nrequire github.com/go-chi/chi/v5 v5.2.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := Run([]string{"init", "--app-url", "https://crm.example.com", "--no-pull"}, env); code != ExitOK {
+	if code := Run([]string{"init", "--no-pull"}, env); code != ExitOK {
 		t.Fatalf("exit %d\n%s%s", code, out, errOut)
 	}
 	if !strings.Contains(out.String(), "Found Go with chi.") || !strings.Contains(out.String(), "  wrote     internal/cauthyauth/cauthyauth.go") {
@@ -129,12 +299,14 @@ func TestInitUsage(t *testing.T) {
 	if code := Run([]string{"init", "--app-url", "https://crm.example.com"}, env); code != ExitUsage || !strings.Contains(errOut.String(), "no package.json or go.mod") {
 		t.Fatalf("exit %d %s", code, errOut)
 	}
+	key := startCauthy(t, acmeCRM)
+	env, _, errOut = testEnv(t, map[string]string{"CAUTHY_KEY": key})
 	nextApp(t, env)
 	for _, args := range [][]string{
-		{"init"},
 		{"init", "--app-url", "http://localhost:3000"},
-		{"init", "--app-url", "https://crm.example.com", "--system", "Acme CRM"},
-		{"init", "--app-url", "https://crm.example.com", "--contracts", "nowhere", "--no-pull"},
+		{"init", "--system", "Acme CRM"},
+		{"init", "--contracts", "nowhere", "--no-pull"},
+		{"init", "--key-env", "ACME_KEY"},
 	} {
 		errOut.Reset()
 		if code := Run(args, env); code != ExitUsage {
@@ -154,9 +326,10 @@ func TestInitReadsTheRequestAddressFromTheGuide(t *testing.T) {
 	if err := os.WriteFile(guide, []byte("Send it to [Vennet](mailto:pact@example.com).\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	env, out, errOut := testEnv(t, map[string]string{"CONTRACTS_DIR": src})
+	key := startCauthy(t, acmeCRM)
+	env, out, errOut := testEnv(t, map[string]string{"CONTRACTS_DIR": src, "CAUTHY_KEY": key})
 	nextApp(t, env)
-	if code := Run([]string{"init", "--app-url", "https://crm.example.com", "--no-pull", "--no-files"}, env); code != ExitOK {
+	if code := Run([]string{"init", "--no-pull", "--no-files"}, env); code != ExitOK {
 		t.Fatalf("exit %d\n%s%s", code, out, errOut)
 	}
 	if !strings.Contains(out.String(), "To: pact@example.com\n") || !strings.Contains(out.String(), "Send the request above to pact@example.com") {

@@ -26,8 +26,9 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 	vars := map[string]string{
 		"PACT_ROOT_KEY": rootKey, "PACT_ROOT_KEY_PREVIOUS": "short", "CAUTHY_TOKEN": token,
 		"CAUTHY_CLIENT_SECRET": clientSecret, "CONFORMANCE_PASSWORD": b.Password,
+		"CAUTHY_KEY": startCauthy(t, acmeCRM),
 	}
-	secrets := []string{rootKey, token, clientSecret, b.Password}
+	secrets := []string{rootKey, token, clientSecret, b.Password, vars["CAUTHY_KEY"], testKeySecret}
 
 	env, out, errOut := testEnv(t, vars)
 	env.HTTP = cauthy.Client()
@@ -44,7 +45,7 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 		{[]string{"conformance", "--origin", b.URL, "--email", b.Email}, ExitOK},
 		{[]string{"conformance", "--origin", b.URL, "--email", b.Email, "--level", "strict"}, ExitFail},
 		{[]string{"keys", "new-root", "--out", "root.key"}, ExitOK},
-		{[]string{"init", "--app-url", "https://crm.example.com", "--no-pull"}, ExitOK},
+		{[]string{"init", "--no-pull"}, ExitOK},
 	}
 	for _, r := range runs {
 		if code := Run(r.args, env); code != r.code {

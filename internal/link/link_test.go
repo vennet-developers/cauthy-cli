@@ -141,3 +141,30 @@ func TestRequestAddress(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// An application already on CAUTHY_KEY asks for a contract on its workspace;
+// the request names its client and key id, never the key.
+func TestConnectedRequest(t *testing.T) {
+	r := request()
+	r.Tenant = "acme"
+	r.ClientID, r.KID = "client_0123456789abcdef0123456789abcdef", "dVpPrRtlQgOGn_9Q6DE2cgFRjUetrT2WPZCQyM48luc"
+	if err := r.Check(); err != nil {
+		t.Fatal(err)
+	}
+	q := ConnectionRequest(r)
+	for _, want := range []string{
+		"Workspace: acme; the application is already connected with CAUTHY_KEY (client client_0123456789abcdef0123456789abcdef, key id dVpPrRtlQgOGn_9Q6DE2cgFRjUetrT2WPZCQyM48luc).",
+		"(an owner or admin of the workspace)",
+	} {
+		if !strings.Contains(q, want) {
+			t.Errorf("request missing %q in\n%s", want, q)
+		}
+	}
+	if strings.Contains(q, "Tenant asked for") {
+		t.Errorf("a connected application asks for no tenant:\n%s", q)
+	}
+	y := YAML(r, "s")
+	if !strings.Contains(y, "with its CAUTHY_KEY") {
+		t.Errorf("link:\n%s", y)
+	}
+}

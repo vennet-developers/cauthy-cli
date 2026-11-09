@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -8,16 +9,20 @@ import (
 	"strings"
 
 	"github.com/vennet-developers/cauthy-cli/internal/detect"
+	"github.com/vennet-developers/cauthy-cli/internal/identity"
 	"github.com/vennet-developers/cauthy-cli/internal/link"
 	"github.com/vennet-developers/cauthy-cli/internal/pull"
 	"github.com/vennet-developers/cauthy-cli/internal/scaffold"
 )
 
-const initHelp = `cauthy init --app-url <url> [--app-url <url>]... [options]
+const initHelp = `cauthy init [options]
 
-Connects the application in this folder to Cauthy by contract. It reads the
-language and framework (Node: Next.js, TanStack Start, Hono, Express,
-Fastify; Go: net/http, chi, Gin, Fiber, Echo) and:
+Adds a contract to an application already running on CAUTHY_KEY. It reads
+the key (from the environment, else from .env or .env.local in this folder;
+never printed), asks Cauthy who the application is (its system, workspace,
+addresses and return path), reads the language and framework (Node: Next.js,
+TanStack Start, Hono, Express, Fastify; Go: net/http, chi, Gin, Fiber, Echo)
+and:
 
   1. drafts the Pact link: with --contracts it writes the link and the
      manifest into that core-contracts checkout (for Vennet's team);
@@ -29,11 +34,15 @@ Fastify; Go: net/http, chi, Gin, Fiber, Echo) and:
 
 It never writes over a file without --force, and never over a link or a
 manifest at all. Run it again at any time: what is there is left alone.
+The application deploys with the same CAUTHY_KEY: a contract adds nothing
+to set.
 
-  --app-url <url>        each address people sign in at; one is https (production)
-  --system <id>          default: from package.json or go.mod
-  --tenant <slug>        the Cauthy tenant; default: the system id
-  --callback-path <path> default: /api/auth/callback
+  --key-env <name>       read this variable instead of CAUTHY_KEY
+  --app-url <url>        each address people sign in at; one is https (production);
+                         default: the application's addresses in Cauthy
+  --system <id>          default: the system Cauthy names
+  --tenant <slug>        default: the application's workspace
+  --callback-path <path> default: the return path Cauthy names
   --no-service           no identity of its own (and so no system proof)
   --persistent-sessions  people may ask to stay signed in
   --lang node|go         when the folder has both package.json and go.mod
@@ -64,6 +73,7 @@ func runInit(args []string, env Env) int {
 	noPull := fs.Bool("no-pull", false, "")
 	noFiles := fs.Bool("no-files", false, "")
 	force := fs.Bool("force", false, "")
+	keyEnv := fs.String("key-env", "CAUTHY_KEY", "")
 	if code, done := parse(fs, args, env, initHelp); done {
 		return code
 	}
@@ -84,13 +94,34 @@ func runInit(args []string, env Env) int {
 		}
 	}
 
+	// The application is already connected: who it is comes from Cauthy.
+	key, _, err := readKey(&env, env.Dir, *keyEnv)
+	if err != nil {
+		return fail(env, err)
+	}
+	id, err := identity.Ask(env.context(), env.HTTP, key)
+	if err != nil {
+		return fail(env, fmt.Errorf("asking Cauthy who the application on %s is: %w", *keyEnv, err))
+	}
+
 	req := link.Request{System: *system, URLs: urls, CallbackPath: *callback, Tenant: *tenant,
-		Service: !*noService, PersistentSessions: *persistent, Language: language, Framework: framework}
+		Service: !*noService, PersistentSessions: *persistent, Language: language, Framework: framework,
+		ClientID: id.ClientID, KID: key.Derive().KID}
+	if req.ClientID == "" {
+		req.ClientID = key.ClientID
+	}
+	fromCauthy(env, &req, id)
 	if req.System == "" {
 		req.System = app.System
 	}
+	if len(urls) == 0 && !hasHTTPS(req.URLs) {
+		return fail(env, errors.New("add the production address on the application's card first: a contract needs the address where the application publishes its key"))
+	}
 	if err := req.Check(); err != nil {
 		return fail(env, usagef("%v", err))
+	}
+	if len(urls) > 0 && len(id.AppURLs) > 0 && !sameSet(req.URLs, id.AppURLs) {
+		warn(env, "--app-url %s differs from what Cauthy says (%s)", strings.Join(req.URLs, " "), strings.Join(id.AppURLs, " "))
 	}
 	// The request goes where Vennet's joining guide says, read from the
 	// core-contracts at hand: no address is hard-coded.
@@ -158,11 +189,65 @@ func runInit(args []string, env Env) int {
 		}
 	}
 
-	nextSteps(env, req, plan, migration, *contracts != "", pulled)
+	nextSteps(env, req, app.Lang, plan, migration, *contracts != "", pulled)
 	if pullFailed {
 		return ExitFail
 	}
 	return ExitOK
+}
+
+// fromCauthy fills what no flag gave from what Cauthy says the application
+// is, and warns where a flag says otherwise.
+func fromCauthy(env Env, req *link.Request, id *identity.Identity) {
+	for _, f := range []struct {
+		flag  string
+		value *string
+		says  string
+	}{
+		{"--system", &req.System, id.System},
+		{"--tenant", &req.Tenant, id.Tenant.Slug},
+		{"--callback-path", &req.CallbackPath, id.CallbackPath},
+	} {
+		switch {
+		case *f.value == "":
+			*f.value = f.says
+		case f.says != "" && *f.value != f.says:
+			warn(env, "%s %s differs from what Cauthy says (%s)", f.flag, *f.value, f.says)
+		}
+	}
+	if len(req.URLs) == 0 {
+		req.URLs = append([]string(nil), id.AppURLs...)
+	}
+}
+
+func warn(env Env, format string, a ...any) {
+	fmt.Fprintf(env.Err, "cauthy: warning: "+format+"\n", a...)
+}
+
+func hasHTTPS(urls []string) bool {
+	for _, u := range urls {
+		if strings.HasPrefix(u, "https://") {
+			return true
+		}
+	}
+	return false
+}
+
+// sameSet says whether a and b hold the same addresses, in any order.
+func sameSet(a, b []string) bool {
+	in := map[string]int{}
+	for _, u := range a {
+		in[strings.TrimRight(u, "/")]++
+	}
+	for _, u := range b {
+		in[strings.TrimRight(u, "/")]--
+	}
+	for _, n := range in {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // pullSource is where the graph is pulled from: --from, else CONTRACTS_DIR,
@@ -203,7 +288,7 @@ func draftContracts(env Env, dir string, req link.Request) error {
 	return nil
 }
 
-func nextSteps(env Env, req link.Request, plan scaffold.Plan, migration []scaffold.File, drafted, pulled bool) {
+func nextSteps(env Env, req link.Request, lang string, plan scaffold.Plan, migration []scaffold.File, drafted, pulled bool) {
 	var steps []string
 	if drafted {
 		steps = append(steps, "In core-contracts: pnpm check, then a pull request. Merging is the approval; Cauthy applies the link on its next deploy.")
@@ -220,11 +305,18 @@ func nextSteps(env Env, req link.Request, plan scaffold.Plan, migration []scaffo
 	if len(migration) > 0 {
 		steps = append(steps, "Run the migration "+migration[0].Path+" with the application's migration tool.")
 	}
-	steps = append(steps, "Make the root key outside the repository and put it in the deployment's secret manager as PACT_ROOT_KEY, then delete the file:\n\n  cauthy keys new-root --out ~/.config/cauthy/pact-root.key")
 	steps = append(steps, plan.Steps...)
-	if !pulled {
-		steps = append(steps, "Once the link is merged: cauthy contracts pull --from <core-contracts folder or graph address>")
+	if pulled {
+		steps = append(steps, "Once the link is merged, pull the graph again: npx @cauthyhq/cli contracts pull")
+	} else {
+		steps = append(steps, "Once the link is merged: npx @cauthyhq/cli contracts pull --from <core-contracts folder or graph address>")
 	}
+	if lang == "go" {
+		steps = append(steps, fmt.Sprintf("The SDK takes the contract (the wiring above does it): cauthy.Options{Contract: &cauthy.Contract{Graph: graph, System: %q}}", req.System))
+	} else {
+		steps = append(steps, fmt.Sprintf("The SDK takes the contract (the wiring above does it): createCauthy({ contract: { graph, system: '%s' } })", req.System))
+	}
+	steps = append(steps, "Then deploy with the same CAUTHY_KEY: nothing else to set. Cauthy adopts the application's key for the contract when it applies the link.")
 	steps = append(steps, "Check it: cauthy pact check --system "+req.System+", and once deployed: cauthy pact check --system "+req.System+" --live "+req.Production())
 	fmt.Fprint(env.Out, "\nNext:\n\n")
 	for i, s := range steps {

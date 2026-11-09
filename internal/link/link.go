@@ -51,6 +51,9 @@ type Request struct {
 	Language           string // Node or Go
 	Framework          string
 	To                 string // where the connection request goes; "" for GuideAddress
+	// ClientID and KID name the application's client and its CAUTHY_KEY's
+	// key id when it is already connected (never the key itself).
+	ClientID, KID string
 }
 
 var tenantSlug = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,63}$`)
@@ -145,8 +148,10 @@ provider:
 `, r.System, r.Tenant, subject)
 	if r.Service {
 		fmt.Fprintf(&b, `
-# %[1]s acts in Cauthy as itself with a key it makes and publishes at the
-# jwks_url of systems/%[1]s.yaml: the client pact.%[1]s-signs-in-with-cauthy.service.
+# %[1]s acts in Cauthy as itself with its CAUTHY_KEY: when Cauthy applies
+# the link it adopts the application's key onto the client
+# pact.%[1]s-signs-in-with-cauthy.service, and the SDK publishes the key's
+# public half at the jwks_url of systems/%[1]s.yaml.
 service: {}
 `, r.System)
 	}
@@ -215,13 +220,19 @@ func ConnectionRequest(r Request) string {
 	if to == "" {
 		to = GuideAddress
 	}
+	owner := "(becomes the workspace owner in Cauthy)"
+	workspace := fmt.Sprintf("Tenant asked for: %s (new, unless Cauthy already lists it).", r.Tenant)
+	if r.ClientID != "" {
+		owner = "(an owner or admin of the workspace)"
+		workspace = fmt.Sprintf("Workspace: %s; the application is already connected with CAUTHY_KEY (client %s, key id %s).", r.Tenant, r.ClientID, r.KID)
+	}
 	return fmt.Sprintf(`To: %s
 Subject: Pact connection request — %s
 
 1. System: name <name>, slug %s, one-line description <description>,
    repository <repository URL>.
 2. Owner: <your full name>, <your email>, <your role>
-   (becomes the workspace owner in Cauthy).
+   %s.
 3. Addresses: production %s; development %s.
 4. Backend language and framework: %s, %s.
 5. What it needs from Cauthy:
@@ -234,10 +245,10 @@ Subject: Pact connection request — %s
    - self-service sign-ups: <yes/no>;
    - allowed email domains: <none, or the domains>;
    - system proof: %s.
-Tenant asked for: %s (new, unless Cauthy already lists it).
+%s
 Callback path: %s.
-`, to, r.System, r.System, strings.Join(prod, ", "), devText, r.Language, r.Framework,
-		yesNo(r.Service), yesNo(r.PersistentSessions), proof, r.Tenant, r.CallbackPath)
+`, to, r.System, r.System, owner, strings.Join(prod, ", "), devText, r.Language, r.Framework,
+		yesNo(r.Service), yesNo(r.PersistentSessions), proof, workspace, r.CallbackPath)
 }
 
 func yesNo(b bool) string {
