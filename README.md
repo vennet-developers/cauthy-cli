@@ -1,12 +1,16 @@
 # cauthy-cli
 
-`cauthy` connects an application to [Cauthy](https://github.com/vennet-developers) by
-contract, in any language: it writes what the application needs, vendors its Pact
-contract, checks it before and after deploying, and certifies a backend against the
-`auth-bff` protocol.
+`cauthy` works with an application on [Cauthy](https://github.com/vennet-developers):
+it says what the application's `CAUTHY_KEY` names, adds a Pact contract to an
+application already running on that key, vendors the contract, checks it before and
+after deploying, and certifies a backend against the `auth-bff` protocol.
+
+An application connects in Cauthy's dashboard (Integrate → Applications), which hands
+over one line, `CAUTHY_KEY=…`, for the secret manager and the local `.env`. Then:
 
 ```sh
-npx @cauthyhq/cli init --app-url https://crm.example.com --app-url http://localhost:3000
+npx @cauthyhq/cli key inspect --check
+npx @cauthyhq/cli init
 npx @cauthyhq/cli contracts pull --from ../core-contracts
 npx @cauthyhq/cli pact check --system acme-crm --live https://crm.example.com
 ```
@@ -24,13 +28,14 @@ npx @cauthyhq/cli pact check --system acme-crm --live https://crm.example.com
 
 | Command | What it does |
 | --- | --- |
-| `cauthy init --app-url <url>...` | Detects the application (Node: Next.js 15.5 or newer, TanStack Start, Hono, Express, Fastify; Go: net/http, chi, Gin, Fiber, Echo). Prints the Pact connection request to email to Vennet at support@vennet.dev (or, with `--contracts <core-contracts checkout>`, drafts the link and the manifest there). Writes the auth wiring, the `cauthy_pact_keys` migration and `PACT_ROOT_KEY=` in `.env.example` (never a value). Pulls the graph when the contracts are at hand. Run it again any time: it never writes over a file without `--force` |
+| `cauthy key inspect [--check] [--key-env <name>]` | What the application's `CAUTHY_KEY` names: its Cauthy, its client, its key id and whether its checksum is intact; `--check` also asks Cauthy whether it knows the key. Reads the environment, else `.env` or `.env.local` (only that one line), and never prints the key's secret |
+| `cauthy init [--key-env <name>]` | Adds a contract to an application already running on `CAUTHY_KEY`: asks Cauthy who the application is (system, workspace, addresses), detects the application (Node: Next.js 15.5 or newer, TanStack Start, Hono, Express, Fastify; Go: net/http, chi, Gin, Fiber, Echo), and prints the Pact connection request to email to Vennet at support@vennet.dev (or, with `--contracts <core-contracts checkout>`, drafts the link and the manifest there). Writes the contract wiring (no key store, no migration) and `CAUTHY_KEY=` in `.env.example` (never a value). Pulls the graph when the contracts are at hand. The application deploys with the same `CAUTHY_KEY`. Run it again any time: it never writes over a file without `--force` |
 | `cauthy contracts pull --from <dir or https url> --to <dir>...` | Writes `graph.json` and `VERSION` into every destination and checks the copies are identical. Refuses a checkout with uncommitted changes unless `--allow-dirty` |
 | `cauthy contracts check --to <dir>...` | Fails when vendored copies differ (for CI) |
-| `cauthy pact check --system <id>` | What the contract says, whether the environment would make the app refuse to start, and (with `CAUTHY_TOKEN`) how Cauthy sees it. `--live <url>` probes the deployed JWKS, session and sign-in redirect |
-| `cauthy keys new-root [--out <file>]` | Makes a `PACT_ROOT_KEY` (to a 0600 file with `--out`; keep it outside the repository, such as `~/.config/cauthy/pact-root.key`) |
-| `cauthy keys rotate`, `cauthy keys reseal` | Explain how to rotate from the running application: the CLI never holds the root key |
-| `cauthy conformance --origin <url> --email <account>` | Runs the `auth-bff` conformance suite (password in `CONFORMANCE_PASSWORD`) |
+| `cauthy pact check --system <id>` | What the contract says, whether the environment would make the app refuse to start (`CAUTHY_KEY` parses and names the contract's Cauthy; no variable it replaces is set beside it), and (with `CAUTHY_TOKEN`) how Cauthy sees it, with the keys registered against the ones published. `--live <url>` probes the deployed JWKS (the key's Ed25519 public half, by its key id), session and sign-in redirect |
+| `cauthy keys new-root [--out <file>]` | Deprecated: `CAUTHY_KEY` replaces `PACT_ROOT_KEY`. Still makes one (to a 0600 file with `--out`) for applications not moved yet, and says so on standard error |
+| `cauthy keys rotate`, `cauthy keys reseal` | Explain how to rotate a `PACT_ROOT_KEY` from the running application: the CLI never holds the root key |
+| `cauthy conformance --origin <url> --email <account>` | Runs the `auth-bff` conformance suite (password in `CONFORMANCE_PASSWORD`); `--key-env <name>` adds the `key.*` checks for a backend on `CAUTHY_KEY` |
 | `cauthy conformance … --level switches --cauthy <url> --tenant <slug>` | Also checks the backend follows the dashboard switches of a test workspace, and puts them back (admin token in `CAUTHY_ADMIN_TOKEN`) |
 | `cauthy version` | Version, commit, and the protocol version it certifies |
 
