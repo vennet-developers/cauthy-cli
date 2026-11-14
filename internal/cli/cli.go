@@ -76,7 +76,7 @@ func System() Env {
 
 const help = `cauthy connects an application to Cauthy.
 
-  cauthy init                 add a contract to an application on CAUTHY_KEY
+  cauthy init                 wire an application to Cauthy on CAUTHY_KEY alone
   cauthy contracts pull       vendor the Pact graph (deprecated: contracts are retired)
   cauthy contracts check      say whether vendored copies are identical (deprecated)
   cauthy pact check           what the contract says, and whether the app would start (deprecated)

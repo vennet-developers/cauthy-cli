@@ -2,7 +2,9 @@
 
 ## 1.3.0
 
-- Contracts are retired: an application runs on `CAUTHY_KEY` alone, and the same key keeps its sessions (`@cauthyhq/node` 1.3.0 and `cauthy-sdk-go` v1.3.0 sign people in through the client Cauthy names for the key). `init --contracts`, `contracts pull`, `contracts check` and `pact check` keep working and print a deprecation warning on stderr pointing to the "Protect sign-in" switches on the application's card in Cauthy's dashboard. `init` without `--contracts` says nothing new.
+- Contracts are retired: an application runs on `CAUTHY_KEY` alone, and the same key keeps its sessions (`@cauthyhq/node` 1.3.0 and `cauthy-sdk-go` v1.3.0 sign people in through the client Cauthy names for the key).
+- **`init` wires `CAUTHY_KEY` alone**, as the five-minute guide does: it says what the key names and what Cauthy says the application is (including the client people sign in through, when it is not the key's), and writes the SDK in key mode (`createCauthy()` and the `/api/auth` route; `cauthy.New(cauthy.Options{})` and its mount) and `CAUTHY_KEY=` in `.env.example`. It no longer drafts or requests a Pact link, writes no contract wiring and no JWKS route, and does not run `contracts pull`. The contract flags (`--app-url`, `--system`, `--tenant`, `--callback-path`, `--no-service`, `--persistent-sessions`, `--from`, `--to`, `--no-pull`) are a usage error without `--contracts`.
+- **Deprecated until 2.0**: `init --contracts` (drafts the link into a core-contracts checkout and writes the contract wiring, as before), `contracts pull`, `contracts check` and `pact check`. Each keeps working and prints a deprecation warning on stderr pointing to the "Protect sign-in" switches on the application's card in Cauthy's dashboard.
 
 ## 1.2.0
 

@@ -45,3 +45,23 @@ func TestGoWiring(t *testing.T) {
 		t.Fatalf("%s", plain.Steps)
 	}
 }
+
+func TestGoOnKeyAlone(t *testing.T) {
+	p := GoKey(&detect.App{Lang: "go", Framework: "net/http", Module: "example.com/svc"})
+	src := files(p)[GoFile]
+	if _, err := parser.ParseFile(token.NewFileSet(), "cauthyauth.go", src, parser.AllErrors); err != nil {
+		t.Fatalf("the file is not Go: %v\n%s", err, src)
+	}
+	if !strings.Contains(src, "cauthy.New(cauthy.Options{})") || strings.Contains(src, "Contract") || strings.Contains(src, "graph") {
+		t.Fatalf("%s", src)
+	}
+	steps := strings.Join(p.Steps, "\n")
+	if !strings.Contains(steps, "auth.Mount(mux) // /api/auth/*") || strings.Contains(steps, "JWKSPath") || strings.Contains(steps, "graph") {
+		t.Fatalf("%s", steps)
+	}
+	echo := GoKey(&detect.App{Lang: "go", Framework: "echo", Module: "example.com/svc"})
+	echoSteps := strings.Join(echo.Steps, "\n")
+	if !strings.Contains(echo.Install, "cauthy-sdk-go/echo@latest") || !strings.Contains(echoSteps, "cauthyecho.Mount(e, auth) // /api/auth/*") || strings.Contains(echoSteps, "JWKS") {
+		t.Fatalf("%q %s", echo.Install, echo.Steps)
+	}
+}

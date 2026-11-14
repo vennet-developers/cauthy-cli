@@ -14,6 +14,8 @@ type whoCauthySays struct {
 	System  string
 	Tenant  string
 	AppURLs []string
+	// SignIn is the client people sign in through; "" is the key's.
+	SignIn string
 }
 
 // startCauthy starts a fake Cauthy that knows one application and answers
@@ -42,10 +44,14 @@ func startCauthy(t *testing.T, who whoCauthySays) string {
 				return
 			}
 			issuer := "http://" + r.Host
+			signIn := who.SignIn
+			if signIn == "" {
+				signIn = testKeyClient
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
 				"issuer": issuer, "audience": issuer,
 				"tenant": map[string]any{"id": "00000000-0000-4000-8000-0000000000a1", "slug": who.Tenant},
-				"system": who.System, "client_id": testKeyClient, "sign_in_client_id": testKeyClient,
+				"system": who.System, "client_id": testKeyClient, "sign_in_client_id": signIn,
 				"app_urls": who.AppURLs, "callback_path": "/api/auth/callback",
 				"key":      map[string]any{"kid": d.KID, "retires_at": nil},
 				"contract": nil,

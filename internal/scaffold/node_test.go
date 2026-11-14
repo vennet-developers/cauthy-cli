@@ -174,3 +174,39 @@ func TestNodeWiringHasNoKeyStore(t *testing.T) {
 		}
 	}
 }
+
+func TestNodeOnKeyAlone(t *testing.T) {
+	next := NodeKey(&detect.App{Lang: "node", Framework: "next", Root: "src", TypeScript: true, NextMajor: 16, PackageManager: "pnpm", Deps: map[string]bool{"next": true}})
+	if paths(next) != "src/lib/auth.ts src/app/api/auth/[...cauthy]/route.ts src/proxy.ts" {
+		t.Fatalf("%s", paths(next))
+	}
+	want := `import { createCauthy } from '@cauthyhq/node'
+import { cauthyNext } from '@cauthyhq/node/next'
+
+// Reads CAUTHY_KEY from the environment.
+export const auth = createCauthy()
+export const cauthy = cauthyNext(auth)
+`
+	if got := files(next)["src/lib/auth.ts"]; got != want {
+		t.Fatalf("auth file:\n%s\nwant:\n%s", got, want)
+	}
+	start := NodeKey(&detect.App{Lang: "node", Framework: "tanstack-start", Root: "src", TypeScript: true, Deps: map[string]bool{}})
+	if paths(start) != "src/auth.ts src/routes/api/auth/$.ts" {
+		t.Fatalf("%s", paths(start))
+	}
+	cjs := NodeKey(&detect.App{Lang: "node", Framework: "express", Deps: map[string]bool{}})
+	if got := files(cjs)["auth.js"]; got != "const { createCauthy } = require('@cauthyhq/node')\n\n// Reads CAUTHY_KEY from the environment.\nexports.auth = createCauthy()\n" {
+		t.Fatalf("%q", got)
+	}
+	steps := strings.Join(cjs.Steps, "\n")
+	if !strings.Contains(steps, "app.use(cauthyExpress(auth))") || strings.Contains(steps, "graph") {
+		t.Fatalf("%s", steps)
+	}
+	for _, p := range []Plan{next, start, cjs} {
+		for path, content := range files(p) {
+			if strings.Contains(content, "contract") || strings.Contains(content, "pact") || strings.Contains(content, "graph") {
+				t.Errorf("%s:\n%s", path, content)
+			}
+		}
+	}
+}

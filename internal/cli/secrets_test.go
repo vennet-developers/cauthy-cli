@@ -67,7 +67,7 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 		{[]string{"key", "inspect"}, ExitOK},
 		{[]string{"key", "inspect", "--key-env", "CAUTHY_KEY_PREVIOUS"}, ExitOK},
 		{[]string{"key", "inspect", "--check"}, ExitFail},
-		{[]string{"init", "--no-pull"}, ExitFail}, // Cauthy cannot be asked
+		{[]string{"init"}, ExitFail}, // Cauthy cannot be asked
 	}
 	for _, r := range runs {
 		if code := Run(r.args, env); code != r.code {
@@ -79,7 +79,7 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 	initVars := map[string]string{"CAUTHY_KEY_PREVIOUS": previous, "PACT_ROOT_KEY": rootKey, "CAUTHY_KEY": startCauthy(t, acmeCRM)}
 	initEnv, initOut, initErr := testEnv(t, initVars)
 	nextApp(t, initEnv)
-	if code := Run([]string{"init", "--no-pull"}, initEnv); code != ExitOK {
+	if code := Run([]string{"init"}, initEnv); code != ExitOK {
 		t.Errorf("init: exit %d\n%s%s", code, initOut, initErr)
 	}
 	secrets = append(secrets, initVars["CAUTHY_KEY"])
