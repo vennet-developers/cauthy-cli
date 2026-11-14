@@ -15,9 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/vennet-developers/cauthy-cli/internal/pact"
-	"github.com/vennet-developers/cauthy-cli/internal/pull"
 )
 
 // Exit codes, the same as the conformance runner's.
@@ -77,12 +74,7 @@ func System() Env {
 const help = `cauthy connects an application to Cauthy.
 
   cauthy init                 wire an application to Cauthy on CAUTHY_KEY alone
-  cauthy contracts pull       vendor the Pact graph (deprecated: contracts are retired)
-  cauthy contracts check      say whether vendored copies are identical (deprecated)
-  cauthy pact check           what the contract says, and whether the app would start (deprecated)
   cauthy key inspect          what the application's CAUTHY_KEY names (--check asks Cauthy)
-  cauthy keys new-root        make a PACT_ROOT_KEY (deprecated: CAUTHY_KEY replaces it)
-  cauthy keys rotate|reseal   how to rotate the application's key (from the app)
   cauthy conformance          certify a backend against the auth-bff protocol
   cauthy version              this build, and the protocol it checks
 
@@ -91,6 +83,12 @@ Run cauthy <command> --help for its flags.
 Exit codes: 0 ok; 1 a check failed; 2 usage or configuration error;
 3 nothing failed, but a check that was asked for did not run.
 `
+
+// retiredCommands were the Pact contract commands (and keys, for the
+// contract's PACT_ROOT_KEY), removed in 1.3.0.
+var retiredCommands = map[string]bool{"contracts": true, "pact": true, "keys": true}
+
+const contractsRetired = "contracts are retired: run on CAUTHY_KEY alone; protect sign-in with the switches on the application's card in Cauthy's dashboard"
 
 type command func(args []string, env Env) int
 
@@ -104,6 +102,10 @@ func Run(args []string, env Env) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		fmt.Fprint(env.Out, help)
 		return ExitOK
+	}
+	if retiredCommands[args[0]] {
+		fmt.Fprintf(env.Err, "cauthy: %s: %s\n", args[0], contractsRetired)
+		return ExitUsage
 	}
 	cmd, ok := commands[args[0]]
 	if !ok {
@@ -120,13 +122,11 @@ func (e *usageError) Error() string { return e.msg }
 
 func usagef(format string, a ...any) error { return &usageError{fmt.Sprintf(format, a...)} }
 
-// fail prints an error and answers its exit code: 2 for a usage error or an
-// input that cannot be read, else 1.
+// fail prints an error and answers its exit code: 2 for a usage error, else 1.
 func fail(env Env, err error) int {
-	fmt.Fprintf(env.Err, "cauthy: %s\n", pact.Clean(err.Error()))
+	fmt.Fprintf(env.Err, "cauthy: %s\n", clean(err.Error()))
 	var usage *usageError
-	var input *pull.InputError
-	if errors.As(err, &usage) || errors.As(err, &input) {
+	if errors.As(err, &usage) {
 		return ExitUsage
 	}
 	return ExitFail
@@ -151,12 +151,6 @@ func parse(fs *flag.FlagSet, args []string, env Env, usage string) (code int, do
 	}
 	return 0, false
 }
-
-// multi is a flag that may be repeated: --to a --to b.
-type multi []string
-
-func (m *multi) String() string     { return strings.Join(*m, ",") }
-func (m *multi) Set(v string) error { *m = append(*m, v); return nil }
 
 // context is the run's context: done when the person interrupts the run.
 func (env Env) context() context.Context {

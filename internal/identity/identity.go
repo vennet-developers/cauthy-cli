@@ -36,11 +36,6 @@ type Identity struct {
 		Kid       string  `json:"kid"`
 		RetiresAt *string `json:"retires_at"`
 	} `json:"key"`
-	Contract *struct {
-		Link                 string `json:"link"`
-		SystemProof          string `json:"system_proof"`
-		RequireVerifiedEmail bool   `json:"require_verified_email"`
-	} `json:"contract"`
 }
 
 // Refusal is Cauthy answering no: the step, its status and its error code.

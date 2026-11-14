@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vennet-developers/cauthy-cli/internal/pact"
 	"github.com/vennet-developers/cauthy-sdk-spec/conformance/runner"
 )
 
@@ -27,7 +26,7 @@ cauthy-sdk-spec, driving the backend as a black box.
   --level      basic (cauthy-auth 0.x), strict (protocol 1 in full) or
                switches (strict, plus the dashboard switches; needs --cauthy)
   --json       also write the report as JSON
-  --jwks-path  contract mode: the JWKS path the backend serves
+  --jwks-path  the JWKS path the backend serves, if it serves one
   --cauthy     Cauthy's address: the dashboard-switch checks flip the
                tenant's sign-in settings there, check the backend follows,
                and put everything back (https, or http on this machine)
@@ -95,7 +94,7 @@ func runConformance(args []string, env Env) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	fmt.Fprint(env.Out, pact.CleanLines(res.Text)) // the details quote the backend's answers
+	fmt.Fprint(env.Out, cleanLines(res.Text)) // the details quote the backend's answers
 	if *jsonOut != "" {
 		if err := os.WriteFile(env.abs(*jsonOut), res.JSON, 0o644); err != nil {
 			return fail(env, usagef("%v", err))

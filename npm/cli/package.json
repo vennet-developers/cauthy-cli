@@ -1,7 +1,7 @@
 {
   "name": "@cauthyhq/cli",
   "version": "0.0.0",
-  "description": "The Cauthy CLI: init, contracts pull, pact check, keys, conformance.",
+  "description": "The Cauthy CLI: init, key inspect, conformance.",
   "license": "Apache-2.0",
   "homepage": "https://github.com/vennet-developers/cauthy-cli",
   "repository": {

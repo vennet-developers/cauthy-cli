@@ -22,7 +22,6 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 	conformanceKey := b.IssueKey(fakeCauthy.URL)
 	rootKey := strings.Repeat("R", 43)
 	token := "cty_pat_SENTINEL_TOKEN"
-	clientSecret := "SENTINEL_CLIENT_SECRET"
 	// The previous key of a rotation: the same client, another test secret.
 	previousSecret := "HyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4"
 	previous, err := cauthykey.Compose(testKeyIssuer, testKeyClient, previousSecret)
@@ -35,12 +34,11 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 	}))
 	defer cauthy.Close()
 	vars := map[string]string{
-		"PACT_ROOT_KEY": rootKey, "PACT_ROOT_KEY_PREVIOUS": "short", "CAUTHY_TOKEN": token,
-		"CAUTHY_CLIENT_SECRET": clientSecret, "CONFORMANCE_PASSWORD": b.Password,
+		"PACT_ROOT_KEY": rootKey, "CAUTHY_TOKEN": token, "CONFORMANCE_PASSWORD": b.Password,
 		"CAUTHY_KEY": testKey, "CAUTHY_KEY_PREVIOUS": previous, "CONFORMANCE_KEY": conformanceKey,
 	}
 	k, _ := cauthykey.Parse(conformanceKey)
-	secrets := []string{rootKey, token, clientSecret, b.Password, testKey, testKeySecret, previous, previousSecret, conformanceKey, k.Secret}
+	secrets := []string{rootKey, token, b.Password, testKey, testKeySecret, previous, previousSecret, conformanceKey, k.Secret}
 
 	env, out, errOut := testEnv(t, vars)
 	// Every address goes to the echoing server: the basic vector's Cauthy
@@ -50,7 +48,6 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 		return (&net.Dialer{}).DialContext(ctx, network, cauthy.Listener.Addr().String())
 	}}
 	env.HTTP = client
-	vendored(t, env, cauthy.URL)
 	nextApp(t, env)
 	// Each run's exit code is checked too, so a run that stopped early (and so
 	// printed nothing) cannot pass this test by accident.
@@ -58,12 +55,9 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 		args []string
 		code int
 	}{
-		{[]string{"pact", "check", "--system", "acme-crm"}, ExitFail},
-		{[]string{"pact", "check", "--system", "acme-crm", "--live", cauthy.URL}, ExitFail},
 		{[]string{"conformance", "--origin", b.URL, "--email", b.Email}, ExitOK},
 		{[]string{"conformance", "--origin", b.URL, "--email", b.Email, "--level", "strict"}, ExitFail},
 		{[]string{"conformance", "--origin", b.URL, "--email", b.Email, "--key-env", "CONFORMANCE_KEY"}, ExitOK},
-		{[]string{"keys", "new-root", "--out", "root.key"}, ExitOK},
 		{[]string{"key", "inspect"}, ExitOK},
 		{[]string{"key", "inspect", "--key-env", "CAUTHY_KEY_PREVIOUS"}, ExitOK},
 		{[]string{"key", "inspect", "--check"}, ExitFail},
@@ -89,8 +83,5 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 		if strings.Contains(printed, s) {
 			t.Errorf("a secret was printed: %q", s)
 		}
-	}
-	if !strings.Contains(printed, "CAUTHY_CLIENT_SECRET set") {
-		t.Fatalf("the variable's name is said, its value never:\n%s", printed)
 	}
 }

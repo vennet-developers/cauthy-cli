@@ -40,7 +40,7 @@ func TestNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a.Lang != "node" || a.Framework != "next" || a.Root != "src" || !a.TypeScript || a.NextMajor != 16 ||
-		a.System != "books-app" || a.PackageManager != "pnpm" || a.DevURL != "http://localhost:3000" {
+		a.PackageManager != "pnpm" || a.DevURL != "http://localhost:3000" {
 		t.Fatalf("%+v", a)
 	}
 	cases := map[string]string{
@@ -73,7 +73,7 @@ func TestGo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.Lang != "go" || a.Framework != "chi" || a.Module != "github.com/acme/acme-crm" || a.System != "acme-crm" || a.DevURL != "http://localhost:8080" {
+	if a.Lang != "go" || a.Framework != "chi" || a.Module != "github.com/acme/acme-crm" || a.DevURL != "http://localhost:8080" {
 		t.Fatalf("%+v", a)
 	}
 	for mod, want := range map[string]string{
@@ -105,13 +105,5 @@ func TestWhatCannotBeDetected(t *testing.T) {
 	}
 	if _, err := Detect(folder(t, map[string]string{"package.json": `{`}), ""); err == nil {
 		t.Fatal("a broken package.json was accepted")
-	}
-}
-
-func TestSystemName(t *testing.T) {
-	for in, want := range map[string]string{"@scope/My_Shop.web": "my_shop-web", "": "app", "---": "app", "acme-crm": "acme-crm"} {
-		if got := SystemName(in); got != want {
-			t.Errorf("%q: %q, want %q", in, got, want)
-		}
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -20,7 +19,6 @@ import (
 type App struct {
 	Lang      string // "node" or "go"
 	Framework string // node: next, tanstack-start, hono, fastify, express; go: net/http, chi, gin, fiber, echo; "" unknown
-	System    string // a system id made of the package or module name
 	DevURL    string
 
 	// Node
@@ -95,7 +93,7 @@ func detectNode(dir string) (*App, error) {
 	for k := range versions {
 		deps[k] = true
 	}
-	a := &App{Lang: "node", System: SystemName(pkg.Name), DevURL: "http://localhost:3000", Deps: deps, ESM: pkg.Type == "module"}
+	a := &App{Lang: "node", DevURL: "http://localhost:3000", Deps: deps, ESM: pkg.Type == "module"}
 	switch {
 	case deps["next"]:
 		a.Framework = "next"
@@ -171,7 +169,6 @@ func detectGo(dir string) (*App, error) {
 	if a.Module == "" {
 		return nil, errors.New("go.mod names no module")
 	}
-	a.System = SystemName(path.Base(a.Module))
 	for mod := range requires {
 		switch {
 		case strings.HasPrefix(mod, "github.com/go-chi/chi"):
@@ -185,18 +182,4 @@ func detectGo(dir string) (*App, error) {
 		}
 	}
 	return a, nil
-}
-
-var notName = regexp.MustCompile(`[^a-z0-9_-]+`)
-
-// SystemName makes a system id of a package or module name.
-func SystemName(name string) string {
-	if i := strings.LastIndex(name, "/"); strings.HasPrefix(name, "@") && i >= 0 {
-		name = name[i+1:]
-	}
-	s := strings.Trim(notName.ReplaceAllString(strings.ToLower(name), "-"), "-_")
-	if s == "" {
-		return "app"
-	}
-	return s
 }

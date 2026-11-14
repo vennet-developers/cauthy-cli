@@ -1,4 +1,4 @@
-// Package scaffold writes into the application what contract mode needs: the
+// Package scaffold writes into the application what CAUTHY_KEY needs: the
 // auth wiring for its framework and the .env.example line. It never writes
 // over a file without force.
 package scaffold

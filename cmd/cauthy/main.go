@@ -1,5 +1,5 @@
-// Command cauthy connects an application to Cauthy: init, contracts pull,
-// pact check, keys and conformance. See `cauthy help`.
+// Command cauthy connects an application to Cauthy: init, key inspect and
+// conformance. See `cauthy help`.
 package main
 
 import (
