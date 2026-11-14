@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.1
 
 - `contracts`, `pact` and `keys` are unknown commands, like any other: the message 1.3.0 answered for them is gone.
 - `init` no longer annotates an old root-key line in `.env.example`.
