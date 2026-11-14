@@ -27,7 +27,7 @@
   },
   "optionalDependencies": {
     "@cauthyhq/cli-darwin-arm64": "0.0.0",
-    "@cauthyhq/cli-darwin-x64": "0.0.0",
+    "@cauthyhq/cli-darwin-x64": "1.2.1",
     "@cauthyhq/cli-linux-arm64": "0.0.0",
     "@cauthyhq/cli-linux-x64": "0.0.0",
     "@cauthyhq/cli-win32-arm64": "0.0.0",
