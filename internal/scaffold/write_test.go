@@ -57,26 +57,6 @@ func TestEnvExampleAddsTheNameNeverAValue(t *testing.T) {
 
 const keyLines = "# The application's only setting: the key Cauthy's dashboard made for it (Integrate → Applications). Set it in the secret manager, never here.\nCAUTHY_KEY=\n"
 
-// A file from contract mode before CAUTHY_KEY: PACT_ROOT_KEY is said to be
-// deprecated, once.
-func TestEnvExampleDeprecatesTheRootKey(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ExampleFile)
-	if err := os.WriteFile(path, []byte("# The only secret of contract mode.\nPACT_ROOT_KEY=\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for range 2 {
-		if _, err := EnvExample(dir); err != nil {
-			t.Fatal(err)
-		}
-	}
-	raw, _ := os.ReadFile(path)
-	want := "# The only secret of contract mode.\n# PACT_ROOT_KEY: deprecated, replaced by CAUTHY_KEY (remove after moving).\nPACT_ROOT_KEY=\n" + keyLines
-	if string(raw) != want {
-		t.Fatalf("%q\nwant %q", raw, want)
-	}
-}
-
 func TestWritesNeverFollowALink(t *testing.T) {
 	dir := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "elsewhere")

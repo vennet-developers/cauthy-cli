@@ -53,8 +53,7 @@ func startCauthy(t *testing.T, who whoCauthySays) string {
 				"tenant": map[string]any{"id": "00000000-0000-4000-8000-0000000000a1", "slug": who.Tenant},
 				"system": who.System, "client_id": testKeyClient, "sign_in_client_id": signIn,
 				"app_urls": who.AppURLs, "callback_path": "/api/auth/callback",
-				"key":      map[string]any{"kid": d.KID, "retires_at": nil},
-				"contract": nil,
+				"key": map[string]any{"kid": d.KID, "retires_at": nil},
 			}})
 		default:
 			http.NotFound(w, r)

@@ -12,11 +12,6 @@ npx @cauthyhq/cli key inspect --check
 npx @cauthyhq/cli init
 ```
 
-**Contracts are retired.** An application runs on `CAUTHY_KEY` alone, and the same key
-keeps its sessions; sign-in is protected with the **Protect sign-in** switches on the
-application's card in Cauthy's dashboard. Since 1.3.0 the CLI has no contract commands:
-`contracts`, `pact` and `keys` fail and say so.
-
 ## Install
 
 | How | Command |

@@ -95,14 +95,13 @@ const ExampleFile = ".env.example"
 
 // keyComment and keyLine are what EnvExample adds.
 const (
-	keyComment        = "# The application's only setting: the key Cauthy's dashboard made for it (Integrate → Applications). Set it in the secret manager, never here."
-	keyLine           = "CAUTHY_KEY="
-	rootKeyDeprecated = "# PACT_ROOT_KEY: deprecated, replaced by CAUTHY_KEY (remove after moving)."
+	keyComment = "# The application's only setting: the key Cauthy's dashboard made for it (Integrate → Applications). Set it in the secret manager, never here."
+	keyLine    = "CAUTHY_KEY="
 )
 
-// EnvExample adds the line CAUTHY_KEY= to ExampleFile, never a value, and
-// marks a PACT_ROOT_KEY= line there deprecated. It answers what it did:
-// added, present, or a warning when the file carries a key.
+// EnvExample adds the line CAUTHY_KEY= to ExampleFile, never a value. It
+// answers what it did: added, present, or a warning when the file carries a
+// key.
 func EnvExample(dir string) (string, error) {
 	path := filepath.Join(dir, ExampleFile)
 	if st, err := os.Lstat(path); err == nil && st.Mode()&os.ModeSymlink != 0 {
@@ -119,16 +118,13 @@ func EnvExample(dir string) (string, error) {
 	}
 	var lines []string
 	present, changed := false, false
-	for i, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+	for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
 		trimmed := strings.TrimSpace(line)
 		switch {
 		case trimmed == keyLine:
 			present = true
 		case strings.HasPrefix(trimmed, keyLine):
 			return "has a value: a CAUTHY_KEY never goes in a committed file; remove it there and make a new key on the application's card", nil
-		case strings.HasPrefix(trimmed, "PACT_ROOT_KEY=") && (i == 0 || strings.TrimSpace(lines[len(lines)-1]) != rootKeyDeprecated):
-			lines = append(lines, rootKeyDeprecated)
-			changed = true
 		}
 		if text != "" {
 			lines = append(lines, line)

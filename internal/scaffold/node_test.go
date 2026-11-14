@@ -113,8 +113,7 @@ func TestServersGetTheLinesToAdd(t *testing.T) {
 	}
 }
 
-// On CAUTHY_KEY the wiring has no key store: no pg, no DATABASE_URL, no
-// PACT_ROOT_KEY.
+// On CAUTHY_KEY the wiring has no key store: no pg, no DATABASE_URL.
 func TestNodeWiringHasNoKeyStore(t *testing.T) {
 	for _, a := range []*detect.App{
 		{Lang: "node", Framework: "next", TypeScript: true, NextMajor: 16, PackageManager: "npm", Deps: map[string]bool{}},
@@ -124,7 +123,7 @@ func TestNodeWiringHasNoKeyStore(t *testing.T) {
 	} {
 		p := NodeKey(a)
 		for path, content := range files(p) {
-			for _, not := range []string{"pg", "postgresKeyStore", "DATABASE_URL", "PACT_ROOT_KEY", "keys:"} {
+			for _, not := range []string{"pg", "postgresKeyStore", "DATABASE_URL", "keys:"} {
 				if strings.Contains(content, not) {
 					t.Errorf("%s %s: %q in\n%s", a.Framework, path, not, content)
 				}
@@ -160,14 +159,7 @@ export const cauthy = cauthyNext(auth)
 		t.Fatalf("%q", got)
 	}
 	steps := strings.Join(cjs.Steps, "\n")
-	if !strings.Contains(steps, "app.use(cauthyExpress(auth))") || strings.Contains(steps, "graph") {
+	if !strings.Contains(steps, "app.use(cauthyExpress(auth))") {
 		t.Fatalf("%s", steps)
-	}
-	for _, p := range []Plan{next, start, cjs} {
-		for path, content := range files(p) {
-			if strings.Contains(content, "contract") || strings.Contains(content, "pact") || strings.Contains(content, "graph") {
-				t.Errorf("%s:\n%s", path, content)
-			}
-		}
 	}
 }

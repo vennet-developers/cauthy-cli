@@ -84,12 +84,6 @@ Exit codes: 0 ok; 1 a check failed; 2 usage or configuration error;
 3 nothing failed, but a check that was asked for did not run.
 `
 
-// retiredCommands were the Pact contract commands (and keys, for the
-// contract's PACT_ROOT_KEY), removed in 1.3.0.
-var retiredCommands = map[string]bool{"contracts": true, "pact": true, "keys": true}
-
-const contractsRetired = "contracts are retired: run on CAUTHY_KEY alone; protect sign-in with the switches on the application's card in Cauthy's dashboard"
-
 type command func(args []string, env Env) int
 
 // commands is filled by each command's file (register in its init).
@@ -102,10 +96,6 @@ func Run(args []string, env Env) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		fmt.Fprint(env.Out, help)
 		return ExitOK
-	}
-	if retiredCommands[args[0]] {
-		fmt.Fprintf(env.Err, "cauthy: %s: %s\n", args[0], contractsRetired)
-		return ExitUsage
 	}
 	cmd, ok := commands[args[0]]
 	if !ok {

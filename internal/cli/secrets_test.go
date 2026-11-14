@@ -20,7 +20,6 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 	defer b.Close()
 	fakeCauthy := b.StartCauthy("admin-token")
 	conformanceKey := b.IssueKey(fakeCauthy.URL)
-	rootKey := strings.Repeat("R", 43)
 	token := "cty_pat_SENTINEL_TOKEN"
 	// The previous key of a rotation: the same client, another test secret.
 	previousSecret := "HyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4"
@@ -34,11 +33,11 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 	}))
 	defer cauthy.Close()
 	vars := map[string]string{
-		"PACT_ROOT_KEY": rootKey, "CAUTHY_TOKEN": token, "CONFORMANCE_PASSWORD": b.Password,
+		"CAUTHY_TOKEN": token, "CONFORMANCE_PASSWORD": b.Password,
 		"CAUTHY_KEY": testKey, "CAUTHY_KEY_PREVIOUS": previous, "CONFORMANCE_KEY": conformanceKey,
 	}
 	k, _ := cauthykey.Parse(conformanceKey)
-	secrets := []string{rootKey, token, b.Password, testKey, testKeySecret, previous, previousSecret, conformanceKey, k.Secret}
+	secrets := []string{token, b.Password, testKey, testKeySecret, previous, previousSecret, conformanceKey, k.Secret}
 
 	env, out, errOut := testEnv(t, vars)
 	// Every address goes to the echoing server: the basic vector's Cauthy
@@ -70,7 +69,7 @@ func TestNoCommandPrintsASecret(t *testing.T) {
 	}
 
 	// init's happy path, on a Cauthy that knows the key.
-	initVars := map[string]string{"CAUTHY_KEY_PREVIOUS": previous, "PACT_ROOT_KEY": rootKey, "CAUTHY_KEY": startCauthy(t, acmeCRM)}
+	initVars := map[string]string{"CAUTHY_KEY_PREVIOUS": previous, "CAUTHY_KEY": startCauthy(t, acmeCRM)}
 	initEnv, initOut, initErr := testEnv(t, initVars)
 	nextApp(t, initEnv)
 	if code := Run([]string{"init"}, initEnv); code != ExitOK {

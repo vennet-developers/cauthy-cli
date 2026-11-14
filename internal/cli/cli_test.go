@@ -39,22 +39,6 @@ func TestHelpAndUnknownCommand(t *testing.T) {
 	}
 }
 
-// The contract commands were removed with contracts: they say so and fail.
-func TestRetiredContractCommands(t *testing.T) {
-	for _, args := range [][]string{{"pact", "check", "--system", "acme-crm"}, {"contracts", "pull"}, {"contracts"}, {"keys", "new-root"}} {
-		env, out, errOut := testEnv(t, nil)
-		want := "cauthy: " + args[0] + ": contracts are retired: run on CAUTHY_KEY alone; protect sign-in with the switches on the application's card in Cauthy's dashboard\n"
-		if code := Run(args, env); code != ExitUsage || errOut.String() != want || out.Len() != 0 {
-			t.Errorf("%v: exit %d %q %q", args, code, out, errOut)
-		}
-	}
-	env, out, _ := testEnv(t, nil)
-	Run(nil, env)
-	if strings.Contains(out.String(), "contract") || strings.Contains(out.String(), "pact") || strings.Contains(out.String(), "keys") {
-		t.Fatalf("help still names contracts:\n%s", out)
-	}
-}
-
 func TestVersion(t *testing.T) {
 	env, out, _ := testEnv(t, nil)
 	Version, Commit, Date = "1.2.3", "0123456789abcdef0123", "2026-11-07T12:00:00Z"

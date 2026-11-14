@@ -36,8 +36,7 @@ func nextSection(t *testing.T, out string) string {
 	return out[i:]
 }
 
-// init wires the application on CAUTHY_KEY alone: no link, no graph, no
-// contract.
+// init wires the application on CAUTHY_KEY alone.
 func TestInitOnKeyAlone(t *testing.T) {
 	key := startCauthy(t, acmeCRM)
 	k, _ := cauthykey.Parse(key)
@@ -68,7 +67,7 @@ func TestInitOnKeyAlone(t *testing.T) {
 			t.Errorf("missing %q in\n%s", want, text)
 		}
 	}
-	for _, not := range []string{"contract", "Pact", "pact", "graph", "Sign-in    "} {
+	for _, not := range []string{"Sign-in    "} {
 		if strings.Contains(text+errOut.String(), not) {
 			t.Errorf("%q in\n%s%s", not, text, errOut)
 		}
@@ -77,10 +76,10 @@ func TestInitOnKeyAlone(t *testing.T) {
 		t.Fatal("the key was printed")
 	}
 	auth, _ := os.ReadFile(filepath.Join(env.Dir, "lib", "auth.ts"))
-	if !strings.Contains(string(auth), "export const auth = createCauthy()\n") || strings.Contains(string(auth), "contract") {
+	if !strings.Contains(string(auth), "export const auth = createCauthy()\n") {
 		t.Fatalf("%s", auth)
 	}
-	for _, none := range []string{"contracts", "app/.well-known", "migrations"} {
+	for _, none := range []string{"app/.well-known", "migrations"} {
 		if _, err := os.Stat(filepath.Join(env.Dir, none)); err == nil {
 			t.Errorf("init wrote %s", none)
 		}
@@ -95,7 +94,7 @@ func TestInitOnKeyAlone(t *testing.T) {
 		t.Fatalf("second run:\n%s", out)
 	}
 	example, _ := os.ReadFile(filepath.Join(env.Dir, scaffold.ExampleFile))
-	if strings.Count(string(example), "CAUTHY_KEY=") != 1 || strings.Contains(string(example), "PACT_ROOT_KEY") {
+	if strings.Count(string(example), "CAUTHY_KEY=") != 1 {
 		t.Fatalf("%q", example)
 	}
 
@@ -125,33 +124,6 @@ func TestInitSaysTheSignInClient(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(env.Dir); len(entries) != 3 {
 		t.Fatalf("--no-files wrote %d files", len(entries)-3)
-	}
-}
-
-// The contract flags were removed with contracts: init knows none of them.
-func TestInitRefusesTheRemovedContractFlags(t *testing.T) {
-	key := startCauthy(t, acmeCRM)
-	env, _, errOut := testEnv(t, map[string]string{"CAUTHY_KEY": key})
-	nextApp(t, env)
-	for _, args := range [][]string{
-		{"init", "--contracts", "../core-contracts"},
-		{"init", "--app-url", "https://crm.example.com"},
-		{"init", "--system", "acme-crm"},
-		{"init", "--tenant", "acme"},
-		{"init", "--callback-path", "/api/auth/callback"},
-		{"init", "--no-service"},
-		{"init", "--persistent-sessions"},
-		{"init", "--from", "../core-contracts"},
-		{"init", "--to", "contracts"},
-		{"init", "--no-pull"},
-	} {
-		errOut.Reset()
-		if code := Run(args, env); code != ExitUsage || !strings.Contains(errOut.String(), "flag provided but not defined: "+strings.TrimPrefix(args[1], "-")) {
-			t.Errorf("%v: exit %d %s", args, code, errOut)
-		}
-	}
-	if entries, _ := os.ReadDir(env.Dir); len(entries) != 3 {
-		t.Fatalf("init wrote %d files before refusing", len(entries)-3)
 	}
 }
 
