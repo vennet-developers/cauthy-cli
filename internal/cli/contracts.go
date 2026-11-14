@@ -22,6 +22,10 @@ changes is refused unless --allow-dirty: the graph an application vendors
 is the one of a commit.
 
 check says whether the --to folders hold identical copies (for CI).
+
+Deprecated: contracts are retired. An application runs on CAUTHY_KEY
+alone; protect sign-in with the "Protect sign-in" switches on the
+application's card in Cauthy's dashboard.
 `
 
 func init() { register("contracts", runContracts) }
@@ -44,6 +48,7 @@ func runContracts(args []string, env Env) int {
 	if code, done := parse(fs, args[1:], env, contractsHelp); done {
 		return code
 	}
+	contractsRetired(env, "contracts "+sub)
 	if len(to) == 0 {
 		to = multi{"contracts"}
 	}

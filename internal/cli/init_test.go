@@ -141,8 +141,9 @@ func TestInitFromWhatCauthySays(t *testing.T) {
 	if err != nil || !strings.Contains(string(manifest), "jwks_url: https://crm.example.com/.well-known/pact-jwks.json\n") {
 		t.Fatalf("manifest: %v\n%s", err, manifest)
 	}
-	if errOut.Len() > 0 {
-		t.Errorf("stderr: %s", errOut)
+	// Nothing on stderr but that contracts are retired.
+	if rest := strings.TrimPrefix(errOut.String(), retired("init --contracts")); rest != "" {
+		t.Errorf("stderr: %s", rest)
 	}
 }
 

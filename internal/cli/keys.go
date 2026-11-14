@@ -24,6 +24,13 @@ CLI never holds the root key or the application's database.
 
 func init() { register("keys", runKeys) }
 
+// contractsRetired says, on stderr, that what follows is about a contract,
+// and contracts are retired: an application runs on CAUTHY_KEY alone.
+func contractsRetired(env Env, what string) {
+	fmt.Fprintf(env.Err, "cauthy: %s is deprecated: contracts are retired. An application runs on CAUTHY_KEY alone, and the same key keeps its sessions. "+
+		"Protect sign-in with the \"Protect sign-in\" switches on the application's card in Cauthy's dashboard.\n", what)
+}
+
 const newRootDeprecated = "cauthy: keys new-root is deprecated: CAUTHY_KEY replaces PACT_ROOT_KEY. Make the key on the application's card in Cauthy's dashboard (Integrate → Applications).\n"
 
 func runKeys(args []string, env Env) int {

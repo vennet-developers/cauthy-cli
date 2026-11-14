@@ -35,6 +35,10 @@ people to Cauthy with the contract's client and PKCE.
 
 Exit codes: 0 ok; 1 a check failed or the application would refuse to
 start; 2 usage, or the graph cannot be read; 3 a check was skipped.
+
+Deprecated: contracts are retired. An application runs on CAUTHY_KEY
+alone; protect sign-in with the "Protect sign-in" switches on the
+application's card in Cauthy's dashboard.
 `
 
 func init() { register("pact", runPact) }
@@ -59,6 +63,7 @@ func runPact(args []string, env Env) int {
 	if code, done := parse(fs, args[1:], env, pactHelp); done {
 		return code
 	}
+	contractsRetired(env, "pact check")
 	if *system == "" {
 		return fail(env, usagef("give --system, the application's id in the graph"))
 	}

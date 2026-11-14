@@ -47,6 +47,7 @@ to set.
   --persistent-sessions  people may ask to stay signed in
   --lang node|go         when the folder has both package.json and go.mod
   --contracts <folder>   a core-contracts checkout to draft the link into
+                         (deprecated: contracts are retired)
   --from <folder|url>    where to pull the graph from; default CONTRACTS_DIR, else
                          ../core-contracts (a folder's scripts/graph.mjs is run with node)
   --to <folder>          where to vendor it (repeat); default contracts
@@ -76,6 +77,9 @@ func runInit(args []string, env Env) int {
 	keyEnv := fs.String("key-env", "CAUTHY_KEY", "")
 	if code, done := parse(fs, args, env, initHelp); done {
 		return code
+	}
+	if *contracts != "" {
+		contractsRetired(env, "init --contracts")
 	}
 
 	app, err := detect.Detect(env.Dir, *lang)

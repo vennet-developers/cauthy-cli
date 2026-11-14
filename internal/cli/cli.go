@@ -77,9 +77,9 @@ func System() Env {
 const help = `cauthy connects an application to Cauthy.
 
   cauthy init                 add a contract to an application on CAUTHY_KEY
-  cauthy contracts pull       vendor the Pact graph into one or more folders
-  cauthy contracts check      say whether vendored copies are identical
-  cauthy pact check           what the contract says, and whether the app would start
+  cauthy contracts pull       vendor the Pact graph (deprecated: contracts are retired)
+  cauthy contracts check      say whether vendored copies are identical (deprecated)
+  cauthy pact check           what the contract says, and whether the app would start (deprecated)
   cauthy key inspect          what the application's CAUTHY_KEY names (--check asks Cauthy)
   cauthy keys new-root        make a PACT_ROOT_KEY (deprecated: CAUTHY_KEY replaces it)
   cauthy keys rotate|reseal   how to rotate the application's key (from the app)
